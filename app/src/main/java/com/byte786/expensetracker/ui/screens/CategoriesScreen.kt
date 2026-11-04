@@ -4,6 +4,7 @@ package com.byte786.expensetracker.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -153,6 +158,11 @@ private fun CategoryEditDialog(initial: Category, cats: List<Category>, onDismis
     var confirmDelete by remember { mutableStateOf<Int?>(null) }
     val isNew = initial.id == 0L
     val parentName = initial.parentId?.let { p -> cats.firstOrNull { it.id == p }?.name }
+    var newParent by remember { mutableStateOf(initial.parentId) }
+    var parentMenu by remember { mutableStateOf(false) }
+    // A top-level category can only go inside another one if it has no subcategories itself.
+    val canMove = !isNew && (initial.parentId != null || cats.none { it.parentId == initial.id })
+    val parentChoices = cats.filter { it.parentId == null && it.type == initial.type && it.id != initial.id }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -172,13 +182,43 @@ private fun CategoryEditDialog(initial: Category, cats: List<Category>, onDismis
                     Spacer(Modifier.width(12.dp))
                     OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
                 }
+                if (canMove) {
+                    Column {
+                        Text("Place it", style = MaterialTheme.typography.labelLarge)
+                        Box {
+                            OutlinedButton(onClick = { parentMenu = true }) {
+                                Text(newParent?.let { p -> "Inside " + (cats.firstOrNull { it.id == p }?.name ?: "?") } ?: "As a main category")
+                                Icon(Icons.Filled.ArrowDropDown, null)
+                            }
+                            DropdownMenu(expanded = parentMenu, onDismissRequest = { parentMenu = false }) {
+                                DropdownMenuItem(text = { Text("As a main category") }, onClick = { newParent = null; parentMenu = false })
+                                parentChoices.forEach { p ->
+                                    DropdownMenuItem(
+                                        text = { Text("Inside ${p.name}") },
+                                        leadingIcon = { CategoryIcon(p.icon, p.color, size = 24.dp) },
+                                        onClick = { newParent = p.id; parentMenu = false },
+                                    )
+                                }
+                            }
+                        }
+                        if (newParent != initial.parentId) {
+                            Text(
+                                "Its records move along with it.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
                 IconColorPicker(icon, color, { icon = it }, { color = it })
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 if (name.isNotBlank()) {
-                    repo.launch { repo.saveCategory(initial.copy(name = name.trim(), icon = icon, color = color)) }
+                    val updated = initial.copy(name = name.trim(), icon = icon, color = color)
+                    repo.launch {
+                        if (newParent != initial.parentId) repo.moveCategory(updated, newParent) else repo.saveCategory(updated)
+                    }
                     onDismiss()
                 }
             }) { Text("Save") }

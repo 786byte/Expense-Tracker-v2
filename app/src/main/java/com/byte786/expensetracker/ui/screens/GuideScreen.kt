@@ -66,6 +66,8 @@ private val topics = listOf(
             "Open the menu (☰) → Categories to add, rename, recolor or delete them. Tap a category to show its " +
             "subcategories, and use “Add subcategory” to add one. While adding a record you can also tap “New” in the " +
             "subcategory row to create one on the spot.\n\n" +
+            "To reorganise, edit a category and use “Place it”: put a main category inside another one " +
+            "(e.g. Bike Maintenance inside Bike) or move a subcategory elsewhere. Its records move with it.\n\n" +
             "Deleting a category keeps your records; they just become “Uncategorized”.",
     ),
     GuideTopic(
@@ -118,7 +120,9 @@ private val topics = listOf(
             "a folder, then Save. From then on the app updates that file automatically after every change and once a day. " +
             "The file contains all records, categories, accounts and photos.\n\n" +
             "To move to a new phone: install the app, then Backup & settings → Restore backup and pick the file from Drive.\n\n" +
-            "Export CSV creates a spreadsheet you can open in Excel or Google Sheets.",
+            "Export CSV creates a spreadsheet you can open in Excel or Google Sheets.\n\n" +
+            "Import CSV brings in records exported from another expense app. Missing accounts and categories are created, " +
+            "names like “Bike Maintenance” go under Bike automatically, and records already in the app are skipped.",
     ),
 )
 

@@ -20,10 +20,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build release APK
+      - name: Test and build release APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew testReleaseUnitTest assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk ExpenseTracker.apk
 
       - name: Upload APK

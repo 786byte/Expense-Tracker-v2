@@ -48,6 +48,30 @@ abstract class AppDao {
         deleteCategoryTree(c.id)
     }
 
+    @Query("UPDATE transactions SET categoryId = :newParent, subcategoryId = :id WHERE categoryId = :id")
+    abstract suspend fun retagParentAsSub(id: Long, newParent: Long)
+
+    @Query("UPDATE transactions SET categoryId = :newParent WHERE subcategoryId = :id")
+    abstract suspend fun retagSubParent(id: Long, newParent: Long)
+
+    @Query("UPDATE transactions SET categoryId = :id, subcategoryId = NULL WHERE subcategoryId = :id")
+    abstract suspend fun retagSubAsParent(id: Long)
+
+    /**
+     * Saves [c] with a new parent and updates its records to match:
+     * a top-level category can go inside another one, a subcategory can move to
+     * another parent or become top-level.
+     */
+    @Transaction
+    open suspend fun moveCategory(c: Category, newParent: Long?) {
+        when {
+            c.parentId == null && newParent != null -> retagParentAsSub(c.id, newParent)
+            c.parentId != null && newParent != null -> retagSubParent(c.id, newParent)
+            c.parentId != null && newParent == null -> retagSubAsParent(c.id)
+        }
+        putCategory(c.copy(parentId = newParent))
+    }
+
     // ---- accounts ----
     @Query(
         """

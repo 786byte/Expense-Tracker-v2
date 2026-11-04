@@ -56,6 +56,10 @@ import androidx.navigation.NavController
 import com.byte786.expensetracker.ExpenseApp
 import com.byte786.expensetracker.data.Backup
 import com.byte786.expensetracker.data.BackupScheduler
+import com.byte786.expensetracker.data.CsvImport
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import com.byte786.expensetracker.ui.Dates
 import com.byte786.expensetracker.ui.components.ConfirmDialog
 import kotlinx.coroutines.launch
@@ -78,6 +82,7 @@ fun SettingsScreen(nav: NavController) {
     val lastError by prefs.lastBackupError.collectAsState()
     var busy by remember { mutableStateOf(false) }
     var restoreUri by remember { mutableStateOf<Uri?>(null) }
+    var importResult by remember { mutableStateOf<CsvImport.Summary?>(null) }
 
     fun fileName(uri: String?): String? = uri?.let { u ->
         runCatching {
@@ -116,6 +121,17 @@ fun SettingsScreen(nav: NavController) {
     }
     val pickRestore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) restoreUri = uri
+    }
+    val importCsv = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            busy = true
+            scope.launch {
+                val r = runCatching { CsvImport.import(ctx, uri) }
+                busy = false
+                r.onSuccess { importResult = it }
+                    .onFailure { snackbar.showSnackbar("Import failed: ${it.message}") }
+            }
+        }
     }
     val exportCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) scope.launch {
@@ -194,7 +210,18 @@ fun SettingsScreen(nav: NavController) {
                         OutlinedButton(onClick = { exportCsv.launch("expenses-${LocalDate.now()}.csv") }) {
                             Icon(Icons.Filled.FileDownload, null); androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp)); Text("Export CSV")
                         }
+                        OutlinedButton(
+                            onClick = { importCsv.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "*/*")) },
+                            enabled = !busy,
+                        ) {
+                            Icon(Icons.Filled.FileUpload, null); androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp)); Text("Import CSV")
+                        }
                     }
+                    Text(
+                        "Import CSV adds records from another app's export (columns like TIME, TYPE, AMOUNT, CATEGORY, ACCOUNT, NOTES). " +
+                            "Missing accounts and categories are created. Records that are already here are skipped, so importing twice is safe.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Text(
                         "Android's own Google backup also saves this app's data to your Google account " +
                             "(Settings → Google → Backup), so a reinstall on the same account brings it back.",
@@ -239,6 +266,32 @@ fun SettingsScreen(nav: NavController) {
                 }
             }
         }
+    }
+
+    importResult?.let { s ->
+        AlertDialog(
+            onDismissRequest = { importResult = null },
+            title = { Text(if (s.imported > 0) "Import finished" else "Nothing imported") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Added ${s.imported} record(s).")
+                    if (s.duplicates > 0) Text("Skipped ${s.duplicates} already in the app.")
+                    if (s.newAccounts.isNotEmpty()) Text("New accounts: ${s.newAccounts.joinToString()}")
+                    if (s.newCategories.isNotEmpty()) Text("New categories: ${s.newCategories.joinToString()}")
+                    if (s.newAccounts.isNotEmpty()) {
+                        Text(
+                            "Tip: set each account's starting balance (menu → Accounts) so the balances match reality.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (s.errors.isNotEmpty()) {
+                        Text("Couldn't read ${s.errors.size} row(s):", color = MaterialTheme.colorScheme.error)
+                        s.errors.take(10).forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { importResult = null }) { Text("OK") } },
+        )
     }
 
     restoreUri?.let { uri ->

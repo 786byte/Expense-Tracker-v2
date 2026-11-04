@@ -56,6 +56,7 @@ class Repository(private val ctx: Context) {
 
     suspend fun saveCategory(c: Category): Long = dao.putCategory(c).also { changed() }
     suspend fun deleteCategory(c: Category) { dao.deleteCategory(c); changed() }
+    suspend fun moveCategory(c: Category, newParent: Long?) { dao.moveCategory(c, newParent); changed() }
 
     suspend fun saveAccount(a: Account): Long = dao.putAccount(a).also { changed() }
     suspend fun deleteAccount(id: Long): Boolean {
