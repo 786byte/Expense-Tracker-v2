@@ -18,8 +18,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Home
@@ -50,79 +50,78 @@ private data class GuideTopic(val icon: ImageVector, val title: String, val body
 
 private val topics = listOf(
     GuideTopic(
+        Icons.Filled.Home, "The home screen",
+        "• Top left: the status cat. It cries when your total balance is below zero and smiles when it's above.\n" +
+            "• Middle: the cat chasing money, just for fun.\n" +
+            "• Top right: your total balance across all accounts (it can be negative).\n" +
+            "• Below: income and expense of the month you're looking at. Tap either to see those records.\n" +
+            "• The month box on the right: arrows go back and forward, tapping the name jumps to any month.\n" +
+            "• Then every record of that month, grouped by day. Tap one to edit or delete it.",
+    ),
+    GuideTopic(
         Icons.Filled.Add, "Adding a record",
-        "Tap the round + button on the home screen.\n\n" +
-            "• Pick Expense, Income or Transfer at the top.\n" +
-            "• Type the amount.\n" +
-            "• Choose a category, then (optionally) a subcategory, e.g. Bike › Mobil.\n" +
-            "• Choose the account the money came from / went to.\n" +
-            "• Date and time default to now; tap them to change.\n" +
-            "• Add a memo and a photo if you like, then tap Save.\n\n" +
-            "Tap any record in a list to edit or delete it.",
+        "Tap the round + button on Home. Three cats pop up:\n" +
+            "• Ginger cat with − : Expense\n" +
+            "• Black cat with + : Income\n" +
+            "• Grey cat with ⇄ : Transfer between your own accounts\n\n" +
+            "Then type the amount, choose a category and (optionally) a subcategory, e.g. Bike › Mobil, " +
+            "the account, date and time, a memo and a photo, and tap Save.",
     ),
     GuideTopic(
-        Icons.Filled.Category, "Categories & subcategories",
-        "Every expense or income can have a category and a subcategory. Example: Expense → Bike → Service.\n\n" +
-            "Open the menu (☰) → Categories to add, rename, recolor or delete them. Tap a category to show its " +
-            "subcategories, and use “Add subcategory” to add one. While adding a record you can also tap “New” in the " +
-            "subcategory row to create one on the spot.\n\n" +
-            "To reorganise, edit a category and use “Place it”: put a main category inside another one " +
-            "(e.g. Bike Maintenance inside Bike) or move a subcategory elsewhere. Its records move with it.\n\n" +
-            "Deleting a category keeps your records; they just become “Uncategorized”.",
+        Icons.Filled.AccountBalanceWallet, "Accounts tab",
+        "The bottom bar's left button. It has two parts:\n\n" +
+            "Categories: every category with how much went through it. Tap a category to see its subcategories " +
+            "with what you spent and earned on each. Tap a subcategory to see every record in it.\n\n" +
+            "Accounts: Cash, bKash, Bank… with their balances. Tap one to see its records.\n\n" +
+            "At the top you choose the period: a month (arrows, or tap it to pick) or All time.",
     ),
     GuideTopic(
-        Icons.Filled.Palette, "Changing icons & colors",
-        "In Categories or Accounts, tap the pencil (or the account) to edit it. Pick any color and any icon from the " +
-            "grid, then Save. The new look shows up everywhere straight away.",
-    ),
-    GuideTopic(
-        Icons.Filled.AccountBalanceWallet, "Accounts",
-        "Accounts are where your money lives: Cash, Bank, bKash, etc. Add or edit them from menu → Accounts. " +
-            "Set a starting balance for money you already had before using the app; after that the balance updates " +
-            "from your records automatically.",
+        Icons.Filled.Palette, "Adding, editing and deleting categories and accounts",
+        "Tapping in the Accounts tab never changes anything. To change things, press Edit (top right):\n" +
+            "• ✎ next to a category, subcategory or account edits its name, icon, color (and starting balance for accounts).\n" +
+            "• 🗑 deletes a category; its records stay, as “Uncategorized”.\n" +
+            "• “Add category / subcategory / account” buttons appear at the end of each list.\n" +
+            "• In a category's editor, “Place it” moves it inside another category, e.g. Bike Maintenance inside Bike; " +
+            "its records move with it.\n" +
+            "Press Done when finished.",
     ),
     GuideTopic(
         Icons.Filled.SwapHoriz, "Transfers",
-        "Moving money between your own accounts (e.g. Bank → bKash, or a cash withdrawal) is a Transfer. " +
-            "It changes both account balances but is NOT counted as income or expense.",
+        "Moving money between your own accounts (e.g. Bank → bKash, paying back the Loan account) is a Transfer. " +
+            "It changes both balances but is not counted as income or expense.",
     ),
     GuideTopic(
-        Icons.Filled.Home, "Home screen",
-        "• Month switcher: use the arrows or tap the month name to jump to any month.\n" +
-            "• Income / Expense / Balance for that month (tap Income or Expense to see those records).\n" +
-            "• Accounts with their current balances.\n" +
-            "• Where your money goes: your top spending categories this month, or all time.\n" +
-            "• All-time records: your single biggest expense and biggest income ever.\n" +
-            "• Every record of the month, grouped by day.",
+        Icons.Filled.PieChart, "Analysis tab",
+        "The bottom bar's right button. Choose Expense, Income or Both, and a month or All time.\n" +
+            "• The pie shows where the money went (or came from); Both compares income with expense.\n" +
+            "• The bars compare income and expense over the last 6 months.\n" +
+            "• At the bottom: your biggest expense and biggest income ever.",
     ),
     GuideTopic(
-        Icons.Filled.Search, "Search (side menu)",
-        "Swipe from the left edge or tap ☰ to open the side menu. Type in the search box, or use the quick buttons: " +
-            "Today, This month, Last month, This year, Pick a date, Pick a month.\n\n" +
-            "On the Search page you can combine filters: text, type (expense/income/transfer), date (day, month, year " +
-            "or a custom range) and category or subcategory. Totals for the results are shown at the top.",
-    ),
-    GuideTopic(
-        Icons.Filled.PieChart, "Reports",
-        "Menu → Reports (or the chart icon on the home screen). Choose Month, Year or All time, and Expense or Income. " +
-            "You get a chart and a list by category; tap a category to see how much went to each subcategory. " +
-            "Tap a subcategory to see those exact records. The bottom card compares income and expense for the last 6 months.",
+        Icons.Filled.Search, "Side menu & search",
+        "Tap ☰ or swipe from the left edge. At the top is the search box and quick buttons: Today, This month, " +
+            "Last month, This year, Pick a date, Pick a month, By category. Below: Backup & settings, Export, Import CSV, " +
+            "this Guide, and Delete & reset.",
     ),
     GuideTopic(
         Icons.Filled.CameraAlt, "Memos & photos",
-        "Every record has a memo field and can hold one photo: take one with the camera or pick one from the gallery. " +
-            "Photos are shrunk automatically so they don't fill your phone. Tap the photo to see it full screen. " +
+        "Every record has a memo and can hold one photo (camera or gallery). Photos are shrunk automatically. " +
             "Memos are searchable.",
     ),
     GuideTopic(
-        Icons.Filled.CloudUpload, "Backup to Google Drive",
-        "Menu → Backup & settings → Choose backup file. In the file picker open the ☰ menu, choose Google Drive and " +
-            "a folder, then Save. From then on the app updates that file automatically after every change and once a day. " +
-            "The file contains all records, categories, accounts and photos.\n\n" +
-            "To move to a new phone: install the app, then Backup & settings → Restore backup and pick the file from Drive.\n\n" +
-            "Export CSV creates a spreadsheet you can open in Excel or Google Sheets.\n\n" +
-            "Import CSV brings in records exported from another expense app. Missing accounts and categories are created, " +
-            "names like “Bike Maintenance” go under Bike automatically, and records already in the app are skipped.",
+        Icons.Filled.CloudUpload, "Backup to Google Drive, export & import",
+        "Side menu → Backup & settings → Choose backup file. In the file picker choose Google Drive and a folder, then Save. " +
+            "The app then updates that file automatically after every change and once a day, including photos.\n\n" +
+            "New phone: install the app, then Backup & settings → Restore backup and pick the file.\n\n" +
+            "Side menu → Export: a CSV spreadsheet or a full backup copy.\n" +
+            "Side menu → Import CSV: bring in records exported from another expense app. Records already here are skipped.",
+    ),
+    GuideTopic(
+        Icons.Filled.DeleteForever, "Delete & reset",
+        "Side menu → Delete & reset. Choose:\n" +
+            "• Records only: deletes every record; accounts and categories stay.\n" +
+            "• Everything: deletes it all and starts again with the default accounts and categories.\n\n" +
+            "It asks twice. A safety copy is kept on the phone: Backup & settings → “Undo the last reset” brings the data back.",
     ),
 )
 

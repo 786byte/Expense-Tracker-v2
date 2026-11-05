@@ -3,14 +3,19 @@ package com.byte786.expensetracker.ui
 import android.net.Uri
 
 object Routes {
+    // Bottom-bar tabs
     const val HOME = "home"
-    const val REPORTS = "reports"
-    const val CATEGORIES = "categories"
     const val ACCOUNTS = "accounts"
-    const val SETTINGS = "settings"
+    const val ANALYSIS = "analysis"
+    val TABS = setOf(HOME, ACCOUNTS, ANALYSIS)
+
     const val GUIDE = "guide"
+    const val SETTINGS = "settings?action={action}"
     const val EDIT = "edit?id={id}&type={type}"
     const val SEARCH = "search?cat={cat}&from={from}&to={to}&type={type}&q={q}"
+
+    /** [action]: "" or "export" / "import" to open that file picker straight away. */
+    fun settings(action: String = "") = "settings?action=$action"
 
     fun edit(id: Long = 0, type: Int = 0) = "edit?id=$id&type=$type"
 

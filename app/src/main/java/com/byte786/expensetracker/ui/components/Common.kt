@@ -301,3 +301,29 @@ fun IconColorPicker(icon: String, color: Long, onIcon: (String) -> Unit, onColor
         }
     }
 }
+
+/** "‹ Nov 2026 ›  [All time]" — chooses which period a tab shows. */
+@Composable
+fun PeriodBar(
+    month: YearMonth,
+    allTime: Boolean,
+    onMonth: (YearMonth) -> Unit,
+    onAllTime: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var pick by remember { mutableStateOf(false) }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        IconButton(onClick = { onMonth(month.minusMonths(1)) }) { Icon(Icons.Filled.ChevronLeft, "Previous month") }
+        androidx.compose.material3.FilterChip(
+            selected = !allTime,
+            onClick = { if (allTime) onMonth(month) else pick = true },
+            label = { Text(Dates.shortMonth(month), fontWeight = FontWeight.Bold) },
+        )
+        IconButton(onClick = { onMonth(month.plusMonths(1)) }) { Icon(Icons.Filled.ChevronRight, "Next month") }
+        androidx.compose.material3.FilterChip(
+            selected = allTime, onClick = onAllTime,
+            label = { Text("All time", fontWeight = FontWeight.Bold) },
+        )
+    }
+    if (pick) MonthPickerDialog(month, onDismiss = { pick = false }) { onMonth(it); pick = false }
+}

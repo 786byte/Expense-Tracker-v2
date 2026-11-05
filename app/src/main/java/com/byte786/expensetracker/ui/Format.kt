@@ -40,6 +40,7 @@ object Dates {
     private val shortDay = DateTimeFormatter.ofPattern("d MMM yyyy")
     private val time = DateTimeFormatter.ofPattern("h:mm a")
     private val month = DateTimeFormatter.ofPattern("MMMM yyyy")
+    private val shortMonth = DateTimeFormatter.ofPattern("MMM yyyy")
 
     fun local(ms: Long): LocalDateTime = Instant.ofEpochMilli(ms).atZone(zone).toLocalDateTime()
     fun date(ms: Long): LocalDate = local(ms).toLocalDate()
@@ -63,6 +64,7 @@ object Dates {
     fun shortDay(ms: Long): String = shortDay.format(local(ms))
     fun time(ms: Long): String = time.format(local(ms))
     fun month(ym: YearMonth): String = month.format(ym)
+    fun shortMonth(ym: YearMonth): String = shortMonth.format(ym)
 
     // Material date pickers work with UTC midnight.
     fun fromPicker(ms: Long): LocalDate = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate()

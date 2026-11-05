@@ -58,6 +58,26 @@ class Repository(private val ctx: Context) {
     suspend fun deleteCategory(c: Category) { dao.deleteCategory(c); changed() }
     suspend fun moveCategory(c: Category, newParent: Long?) { dao.moveCategory(c, newParent); changed() }
 
+    /** Backup taken automatically right before "Delete & reset", so it can be undone. */
+    val safetyFile: File get() = File(ctx.filesDir, "safety/before-reset.zip")
+
+    /** Deletes every record (and its photo). Accounts and categories stay. */
+    suspend fun deleteAllRecords() {
+        Backup.backupToFile(safetyFile)
+        dao.clearTxns()
+        photosDir.listFiles()?.forEach { it.delete() }
+        changed()
+    }
+
+    /** Deletes everything and starts over with the default accounts and categories. */
+    suspend fun resetEverything() {
+        Backup.backupToFile(safetyFile)
+        dao.replaceAll(emptyList(), emptyList(), emptyList())
+        photosDir.listFiles()?.forEach { it.delete() }
+        Seed.run(dao)
+        changed()
+    }
+
     suspend fun saveAccount(a: Account): Long = dao.putAccount(a).also { changed() }
     suspend fun deleteAccount(id: Long): Boolean {
         if (dao.accountUsage(id) > 0) return false

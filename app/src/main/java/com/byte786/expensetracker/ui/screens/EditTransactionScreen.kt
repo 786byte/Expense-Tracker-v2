@@ -263,7 +263,7 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Category", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { nav.navigate(Routes.CATEGORIES) }) { Text("Manage") }
+                        TextButton(onClick = { nav.navigate(Routes.ACCOUNTS) }) { Text("Manage") }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         parents.forEach { c ->

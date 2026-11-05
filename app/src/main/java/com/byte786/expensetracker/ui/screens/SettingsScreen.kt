@@ -43,6 +43,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,7 +68,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @Composable
-fun SettingsScreen(nav: NavController) {
+fun SettingsScreen(nav: NavController, action: String = "") {
     val repo = ExpenseApp.instance.repo
     val prefs = repo.prefs
     val ctx = LocalContext.current
@@ -140,6 +142,21 @@ fun SettingsScreen(nav: NavController) {
         }
     }
 
+    // Opened from the side menu's Export / Import CSV.
+    var actionHandled by rememberSaveable { mutableStateOf(false) }
+    var exportChooser by remember { mutableStateOf(false) }
+    LaunchedEffect(action) {
+        if (!actionHandled) {
+            actionHandled = true
+            when (action) {
+                "export" -> exportChooser = true
+                "import" -> importCsv.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "*/*"))
+            }
+        }
+    }
+    var hasSafetyCopy by remember { mutableStateOf(repo.safetyFile.exists()) }
+    var confirmUndo by remember { mutableStateOf(false) }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
@@ -200,6 +217,11 @@ fun SettingsScreen(nav: NavController) {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Restore & export", style = MaterialTheme.typography.titleMedium)
+                    if (hasSafetyCopy) {
+                        Button(onClick = { confirmUndo = true }, enabled = !busy) {
+                            Icon(Icons.Filled.Restore, null); androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp)); Text("Undo the last reset")
+                        }
+                    }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { pickRestore.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }, enabled = !busy) {
                             Icon(Icons.Filled.Restore, null); androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp)); Text("Restore backup")
@@ -292,6 +314,42 @@ fun SettingsScreen(nav: NavController) {
             },
             confirmButton = { TextButton(onClick = { importResult = null }) { Text("OK") } },
         )
+    }
+
+    if (exportChooser) {
+        AlertDialog(
+            onDismissRequest = { exportChooser = false },
+            title = { Text("Export") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("CSV: a spreadsheet of all records (opens in Excel / Google Sheets).", style = MaterialTheme.typography.bodySmall)
+                    Text("Backup copy: everything incl. photos, can be restored into this app.", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { exportChooser = false; exportCsv.launch("expenses-${LocalDate.now()}.csv") }) { Text("CSV") }
+            },
+            dismissButton = {
+                TextButton(onClick = { exportChooser = false; oneOffBackup.launch("ExpenseTracker-${LocalDate.now()}.zip") }) { Text("Backup copy") }
+            },
+        )
+    }
+    if (confirmUndo) {
+        ConfirmDialog(
+            "Undo the last reset?",
+            "Everything in the app now will be replaced by the data saved just before your last “Delete & reset”.",
+            confirm = "Restore",
+            onDismiss = { confirmUndo = false },
+        ) {
+            confirmUndo = false
+            busy = true
+            scope.launch {
+                val r = runCatching { Backup.restoreFrom(ctx, Uri.fromFile(repo.safetyFile)) }
+                busy = false
+                if (r.isSuccess) { repo.safetyFile.delete(); hasSafetyCopy = false; BackupScheduler.onDataChanged(ctx) }
+                snackbar.showSnackbar(if (r.isSuccess) "Data from before the reset is back" else "Restore failed: ${r.exceptionOrNull()?.message}")
+            }
+        }
     }
 
     restoreUri?.let { uri ->

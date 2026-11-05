@@ -32,6 +32,16 @@ object Backup {
     }
 
     suspend fun backupTo(ctx: Context, uri: Uri) = withContext(Dispatchers.IO) {
+        openOut(ctx, uri).use { writeZip(it) }
+    }
+
+    /** Writes a backup into a private file (used for the safety copy taken before a reset). */
+    suspend fun backupToFile(file: File) = withContext(Dispatchers.IO) {
+        file.parentFile?.mkdirs()
+        file.outputStream().use { writeZip(it) }
+    }
+
+    private suspend fun writeZip(out: OutputStream) {
         val repo = ExpenseApp.instance.repo
         val dao = repo.dao
         val accounts = dao.allAccounts()
@@ -45,8 +55,8 @@ object Backup {
             put("categories", JSONArray(categories.map { it.toJson() }))
             put("transactions", JSONArray(txns.map { it.toJson() }))
         }
-        openOut(ctx, uri).use { raw ->
-            ZipOutputStream(raw.buffered()).use { zip ->
+        run {
+            ZipOutputStream(out.buffered()).use { zip ->
                 zip.putNextEntry(ZipEntry("data.json"))
                 zip.write(json.toString().toByteArray())
                 zip.closeEntry()

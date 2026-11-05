@@ -2,8 +2,16 @@
 
 package com.byte786.expensetracker.ui.screens
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,30 +23,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,22 +52,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.byte786.expensetracker.ExpenseApp
-import com.byte786.expensetracker.data.Txn
 import com.byte786.expensetracker.data.TxnType
 import com.byte786.expensetracker.ui.Dates
 import com.byte786.expensetracker.ui.Money
 import com.byte786.expensetracker.ui.Routes
-import com.byte786.expensetracker.ui.components.CategoryIcon
+import com.byte786.expensetracker.ui.components.CatFace
+import com.byte786.expensetracker.ui.components.CatMood
 import com.byte786.expensetracker.ui.components.EmptyState
 import com.byte786.expensetracker.ui.components.Lookup
-import com.byte786.expensetracker.ui.components.MonthSwitcher
-import com.byte786.expensetracker.ui.components.SectionTitle
+import com.byte786.expensetracker.ui.components.MonthPickerDialog
+import com.byte786.expensetracker.ui.components.RunningCat
 import com.byte786.expensetracker.ui.components.txnDayGroups
 import com.byte786.expensetracker.ui.theme.LocalCurrency
 import com.byte786.expensetracker.ui.theme.MoneyColors
@@ -79,185 +84,164 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
     val currency = LocalCurrency.current
 
     var month by rememberSaveable { mutableStateOf(YearMonth.now()) }
-    var topAllTime by rememberSaveable { mutableStateOf(false) }
-    var showGuide by remember { mutableStateOf(!repo.prefs.guideDismissed) }
+    var fabOpen by rememberSaveable { mutableStateOf(false) }
+    var pickMonth by remember { mutableStateOf(false) }
 
     val range = Dates.monthRange(month)
     val monthTx = remember(txns, month) { txns.filter { it.date >= range.first && it.date < range.second } }
     val income = monthTx.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
     val expense = monthTx.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
-    val biggestExpense = remember(txns) { txns.filter { it.type == TxnType.EXPENSE }.maxByOrNull { it.amount } }
-    val biggestIncome = remember(txns) { txns.filter { it.type == TxnType.INCOME }.maxByOrNull { it.amount } }
-    val topCats = remember(txns, monthTx, topAllTime) {
-        (if (topAllTime) txns else monthTx).filter { it.type == TxnType.EXPENSE }
-            .groupBy { it.categoryId }
-            .map { (id, list) -> id to list.sumOf { it.amount } }
-            .sortedByDescending { it.second }
-            .take(5)
-    }
+    val total = accs.sumOf { it.balance }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Expense Tracker") },
-                navigationIcon = { IconButton(onClick = openDrawer) { Icon(Icons.Filled.Menu, "Menu") } },
-                actions = {
-                    IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Filled.Search, "Search") }
-                    IconButton(onClick = { nav.navigate(Routes.REPORTS) }) { Icon(Icons.Filled.PieChart, "Reports") }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { nav.navigate(Routes.edit()) }) {
-                Icon(Icons.Filled.Add, "Add expense, income or transfer")
+    BackHandler(enabled = fabOpen) { fabOpen = false }
+
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Home", fontWeight = FontWeight.Black) },
+                    navigationIcon = { IconButton(onClick = openDrawer) { Icon(Icons.Filled.Menu, "Menu") } },
+                    actions = { IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Filled.Search, "Search") } },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = { fabOpen = true },
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.onBackground,
+                    contentColor = MaterialTheme.colorScheme.background,
+                ) { Icon(Icons.Filled.Add, "Add expense, income or transfer", Modifier.size(28.dp)) }
+            },
+        ) { pad ->
+            LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(bottom = 96.dp)) {
+                // Status cat | running cat | total balance
+                item(key = "hero") {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            val debt = total < 0
+                            CatFace(
+                                if (debt) CatMood.CRYING else CatMood.HAPPY, Modifier.size(56.dp),
+                                description = if (debt) "Crying cat: you are in debt" else "Happy cat: you are in profit",
+                            )
+                            Text(
+                                if (debt) "In debt" else "In profit",
+                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black,
+                                color = if (debt) MoneyColors.expense else MoneyColors.income,
+                            )
+                        }
+                        RunningCat(Modifier.weight(1f).height(72.dp))
+                        Column(Modifier.width(104.dp), horizontalAlignment = Alignment.End) {
+                            Text("Total balance", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                Money.format(total, currency), style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black, maxLines = 1, textAlign = TextAlign.End,
+                                color = if (total < 0) MoneyColors.expense else MoneyColors.income,
+                            )
+                        }
+                    }
+                }
+
+                // Month totals (left) and month switcher (right)
+                item(key = "month") {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            TotalLine("Income", "+" + Money.format(income, currency), MoneyColors.income) {
+                                val (f, t) = range; nav.navigate(Routes.search(from = f, to = t, type = TxnType.INCOME))
+                            }
+                            TotalLine("Expense", "-" + Money.format(expense, currency), MoneyColors.expense) {
+                                val (f, t) = range; nav.navigate(Routes.search(from = f, to = t, type = TxnType.EXPENSE))
+                            }
+                        }
+                        Row(
+                            Modifier.clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp)),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IconButton(onClick = { month = month.minusMonths(1) }) { Icon(Icons.Filled.ChevronLeft, "Previous month") }
+                            TextButton(onClick = { pickMonth = true }) {
+                                Text(Dates.shortMonth(month), fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            IconButton(onClick = { month = month.plusMonths(1) }) { Icon(Icons.Filled.ChevronRight, "Next month") }
+                        }
+                    }
+                }
+
+                if (monthTx.isEmpty()) item(key = "empty") { EmptyState("Nothing recorded in ${Dates.month(month)}.\nTap + to add one.") }
+                txnDayGroups(monthTx, lk) { nav.navigate(Routes.edit(it.id)) }
             }
-        },
-    ) { pad ->
-        LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(bottom = 96.dp)) {
-            if (showGuide) item(key = "guide") {
-                Card(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        }
+
+        // + menu: three cats
+        AnimatedVisibility(fabOpen, enter = fadeIn(), exit = fadeOut()) {
+            Box(
+                Modifier.fillMaxSize().background(Color(0x732A1F17))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { fabOpen = false }
+            ) {
+                Column(
+                    Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.MenuBook, null)
-                        Spacer(Modifier.width(12.dp))
-                        Text("New here? Read the quick guide.", Modifier.weight(1f))
-                        TextButton(onClick = { nav.navigate(Routes.GUIDE) }) { Text("Open") }
-                        IconButton(onClick = { showGuide = false; repo.prefs.guideDismissed = true }) {
-                            Icon(Icons.Filled.Close, "Dismiss")
-                        }
+                    CatChoice("Expense", MoneyColors.expense, TxnType.EXPENSE, fur = Color(0xFFE8913A)) {
+                        fabOpen = false; nav.navigate(Routes.edit(type = TxnType.EXPENSE))
                     }
+                    CatChoice("Income", MoneyColors.income, TxnType.INCOME, fur = Color(0xFF4A4A4A), eyes = Color(0xFFF2C14E), nose = Color(0xFFF29C9C)) {
+                        fabOpen = false; nav.navigate(Routes.edit(type = TxnType.INCOME))
+                    }
+                    CatChoice("Transfer", MoneyColors.transfer, TxnType.TRANSFER, fur = Color(0xFFCFC7BB)) {
+                        fabOpen = false; nav.navigate(Routes.edit(type = TxnType.TRANSFER))
+                    }
+                    FloatingActionButton(
+                        onClick = { fabOpen = false },
+                        shape = CircleShape,
+                        containerColor = MaterialTheme.colorScheme.background,
+                        contentColor = MaterialTheme.colorScheme.onBackground,
+                    ) { Icon(Icons.Filled.Close, "Close add menu") }
                 }
             }
-
-            item(key = "month") { MonthSwitcher(month, { month = it }) }
-
-            item(key = "summary") {
-                ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    Row(Modifier.padding(16.dp)) {
-                        SummaryCell("Income", Money.format(income, currency), MoneyColors.income, Modifier.weight(1f)) {
-                            val (f, t) = range; nav.navigate(Routes.search(from = f, to = t, type = TxnType.INCOME))
-                        }
-                        SummaryCell("Expense", Money.format(expense, currency), MoneyColors.expense, Modifier.weight(1f)) {
-                            val (f, t) = range; nav.navigate(Routes.search(from = f, to = t, type = TxnType.EXPENSE))
-                        }
-                        val net = income - expense
-                        SummaryCell(
-                            "Balance", Money.format(net, currency),
-                            if (net >= 0) MoneyColors.income else MoneyColors.expense, Modifier.weight(1f),
-                        ) {}
-                    }
-                }
-            }
-
-            if (accs.isNotEmpty()) item(key = "accounts") {
-                SectionTitle("Accounts")
-                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(accs, key = { it.account.id }) { a ->
-                        OutlinedCard(onClick = { nav.navigate(Routes.ACCOUNTS) }) {
-                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                CategoryIcon(a.account.icon, a.account.color, size = 32.dp)
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(a.account.name, style = MaterialTheme.typography.labelMedium)
-                                    Text(Money.format(a.balance, currency), fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            item(key = "top") {
-                SectionTitle("Where your money goes") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(selected = !topAllTime, onClick = { topAllTime = false }, label = { Text("Month") })
-                        FilterChip(selected = topAllTime, onClick = { topAllTime = true }, label = { Text("All time") })
-                    }
-                }
-                ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    if (topCats.isEmpty()) {
-                        EmptyState("No expenses yet")
-                    } else {
-                        val max = topCats.first().second.coerceAtLeast(1)
-                        Column(Modifier.padding(vertical = 8.dp)) {
-                            topCats.forEach { (catId, sum) ->
-                                val c = catId?.let { lk.cat[it] }
-                                Row(
-                                    Modifier.fillMaxWidth().clickable {
-                                        val (f, t) = if (topAllTime) -1L to -1L else range
-                                        nav.navigate(Routes.search(cat = catId ?: -1, from = f, to = t, type = TxnType.EXPENSE))
-                                    }.padding(horizontal = 16.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    CategoryIcon(c?.icon ?: "category", c?.color ?: 0xFF9E9E9E, size = 32.dp)
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Row {
-                                            Text(c?.name ?: "Uncategorized", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            Text(Money.format(sum, currency), fontWeight = FontWeight.SemiBold)
-                                        }
-                                        Spacer(Modifier.height(4.dp))
-                                        LinearProgressIndicator(
-                                            progress = { sum.toFloat() / max },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            color = Color(c?.color ?: 0xFF9E9E9E),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            item(key = "records") {
-                SectionTitle("All-time records")
-                Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RecordCard("Biggest expense", biggestExpense, lk, Modifier.weight(1f)) { nav.navigate(Routes.edit(it.id)) }
-                    RecordCard("Biggest income", biggestIncome, lk, Modifier.weight(1f)) { nav.navigate(Routes.edit(it.id)) }
-                }
-            }
-
-            item(key = "list-title") { SectionTitle("${Dates.month(month)} transactions") }
-            if (monthTx.isEmpty()) item(key = "empty") { EmptyState("Nothing recorded this month.\nTap + to add your first one.") }
-            txnDayGroups(monthTx, lk) { nav.navigate(Routes.edit(it.id)) }
         }
     }
+
+    if (pickMonth) MonthPickerDialog(month, onDismiss = { pickMonth = false }) { month = it; pickMonth = false }
 }
 
 @Composable
-private fun SummaryCell(label: String, value: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
-    Column(modifier.clickable(onClick = onClick)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleMedium, color = color, fontWeight = FontWeight.Bold, maxLines = 1)
+private fun TotalLine(label: String, value: String, color: Color, onClick: () -> Unit) {
+    Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 2.dp, horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.width(64.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = color)
     }
 }
 
 @Composable
-private fun RecordCard(title: String, t: Txn?, lk: Lookup, modifier: Modifier, onClick: (Txn) -> Unit) {
-    val currency = LocalCurrency.current
-    ElevatedCard(modifier.clickable(enabled = t != null) { t?.let(onClick) }) {
-        Column(Modifier.padding(12.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (t == null) {
-                Text("—", style = MaterialTheme.typography.titleMedium)
-            } else {
-                Text(
-                    Money.format(t.amount, currency), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                    color = if (t.type == TxnType.EXPENSE) MoneyColors.expense else MoneyColors.income,
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val (icon, color) = lk.icon(t)
-                    CategoryIcon(icon, color, size = 20.dp)
-                    Spacer(Modifier.width(6.dp))
-                    Text(lk.title(t), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Text(Dates.shortDay(t.date), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.size(0.dp))
-            }
+private fun CatChoice(
+    label: String,
+    color: Color,
+    type: Int,
+    fur: Color,
+    eyes: Color = Color(0xFF2A1F17),
+    nose: Color = Color(0xFF2A1F17),
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.clip(RoundedCornerShape(32.dp)).clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
+            Text(label, Modifier.padding(horizontal = 14.dp, vertical = 8.dp), fontWeight = FontWeight.Black, color = color)
+        }
+        Spacer(Modifier.width(10.dp))
+        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerLowest, shadowElevation = 4.dp) {
+            CatFace(CatMood.PLAIN, Modifier.padding(6.dp).size(52.dp), fur = fur, eyes = eyes, nose = nose, badge = type)
         }
     }
 }
