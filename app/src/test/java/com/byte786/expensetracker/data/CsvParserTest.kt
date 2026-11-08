@@ -36,7 +36,8 @@ class CsvParserTest {
 
         assertEquals(175050L, rows[1].amount)
         assertEquals("\"Premium plan\"", rows[1].memo)
-        assertEquals("Tickets = 1000\nPopcorn = 320", rows[2].memo)
+        assertEquals("Tickets = 1000", rows[2].memo)
+        assertEquals("Popcorn = 320", rows[2].description)
         assertEquals(LocalDateTime.of(2026, 8, 3, 21, 2).atZone(zone).toInstant().toEpochMilli(), rows[2].date)
     }
 
@@ -55,12 +56,14 @@ class CsvParserTest {
     }
 
     @Test fun readsOwnExportFormat() {
-        val csv = "Date,Type,Amount,Account,To account,Category,Subcategory,Memo\n" +
-            "\"2026-11-01 17:23\",\"Expense\",\"3450.00\",\"Cash\",\"\",\"Bike\",\"Parts\",\"brake pads\"\n"
+        val csv = "Date,Type,Amount,Account,To account,Category,Subcategory,Title,Description\n" +
+            "\"2026-11-01 17:23\",\"Expense\",\"3450.00\",\"Cash\",\"\",\"Bike\",\"Parts\",\"brake pads\",\"front and rear\nfrom shop\"\n"
         val row = CsvParser.parse(csv, zone).rows.single()
         assertEquals("Bike", row.category)
         assertEquals("Parts", row.subcategory)
         assertEquals(345000L, row.amount)
+        assertEquals("brake pads", row.memo)
+        assertEquals("front and rear\nfrom shop", row.description)
         assertTrue(row.toAccount == null)
     }
 }

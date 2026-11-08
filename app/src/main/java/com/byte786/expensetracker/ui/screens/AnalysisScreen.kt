@@ -81,7 +81,7 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
     val txns by repo.txns.collectAsState()
     val cats by repo.categories.collectAsState()
     val accs by repo.accounts.collectAsState()
-    val lk = remember(cats, accs) { Lookup(cats, accs.map { it.account }) }
+    val lk = remember(cats, accs, txns) { Lookup(cats, accs.map { it.account }, txns) }
     val currency = LocalCurrency.current
 
     var mode by rememberSaveable { mutableIntStateOf(TxnType.EXPENSE) } // EXPENSE, INCOME or BOTH
@@ -186,8 +186,9 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
             }
 
             item(key = "records") {
-                val bigExp = txns.filter { it.type == TxnType.EXPENSE }.maxByOrNull { it.amount }
-                val bigInc = txns.filter { it.type == TxnType.INCOME }.maxByOrNull { it.amount }
+                val bills = lk.merged(txns)
+                val bigExp = bills.filter { it.type == TxnType.EXPENSE }.maxByOrNull { it.amount }
+                val bigInc = bills.filter { it.type == TxnType.INCOME }.maxByOrNull { it.amount }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     RecordCard("Biggest expense ever", bigExp, lk, expenseColor, Modifier.weight(1f)) { nav.navigate(Routes.edit(it.id)) }
                     RecordCard("Biggest income ever", bigInc, lk, incomeColor, Modifier.weight(1f)) { nav.navigate(Routes.edit(it.id)) }

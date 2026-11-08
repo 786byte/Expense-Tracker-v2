@@ -2,7 +2,20 @@
 
 package com.byte786.expensetracker.ui.screens
 
+import android.speech.RecognizerIntent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.byte786.expensetracker.ui.components.VoiceInput
+import com.byte786.expensetracker.ui.components.statusMood
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -80,7 +93,7 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
     val txns by repo.txns.collectAsState()
     val cats by repo.categories.collectAsState()
     val accs by repo.accounts.collectAsState()
-    val lk = remember(cats, accs) { Lookup(cats, accs.map { it.account }) }
+    val lk = remember(cats, accs, txns) { Lookup(cats, accs.map { it.account }, txns) }
     val currency = LocalCurrency.current
 
     var month by rememberSaveable { mutableStateOf(YearMonth.now()) }
@@ -95,13 +108,39 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
 
     BackHandler(enabled = fabOpen) { fabOpen = false }
 
+    // Status cat mood: always about the current month.
+    val (cf, ct) = Dates.monthRange(YearMonth.now())
+    val nowTx = txns.filter { it.date >= cf && it.date < ct }
+    val nowInc = nowTx.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
+    val nowExp = nowTx.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
+    val mood = statusMood(total, nowInc, nowExp)
+    val moodText = when (mood) {
+        CatMood.CRYING -> "In debt 😿 Total balance is ${Money.format(total, currency)}"
+        CatMood.ANGRY -> "Angry 😾 This month you spent ${Money.format(nowExp - nowInc, currency)} more than you earned"
+        CatMood.HAPPY -> "In plus 😺 This month you saved ${Money.format(nowInc - nowExp, currency)}"
+        else -> "Neutral 🐱 This month is about even"
+    }
+    val moodTip = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val heard = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (!heard.isNullOrBlank()) {
+            repo.voiceDraft = VoiceInput.parse(heard, cats, accs.map { it.account })
+            nav.navigate(Routes.edit(type = repo.voiceDraft!!.type))
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = { Text("Home", fontWeight = FontWeight.Black) },
                     navigationIcon = { IconButton(onClick = openDrawer) { Icon(Icons.Filled.Menu, "Menu") } },
-                    actions = { IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Filled.Search, "Search") } },
+                    actions = {
+                        IconButton(onClick = { VoiceInput.launch(ctx, voiceLauncher) }) { Icon(Icons.Filled.Mic, "Add by voice") }
+                        IconButton(onClick = { nav.navigate(Routes.search()) }) { Icon(Icons.Filled.Search, "Search") }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 )
             },
@@ -125,17 +164,16 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
                             .padding(horizontal = 10.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            val debt = total < 0
-                            CatFace(
-                                if (debt) CatMood.CRYING else CatMood.HAPPY, Modifier.size(56.dp),
-                                description = if (debt) "Crying cat: you are in debt" else "Happy cat: you are in profit",
-                            )
-                            Text(
-                                if (debt) "In debt" else "In profit",
-                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black,
-                                color = if (debt) MoneyColors.expense else MoneyColors.income,
-                            )
+                        // Status cat: picture only; tap it to see the mood.
+                        TooltipBox(
+                            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                            tooltip = { PlainTooltip { Text(moodText) } },
+                            state = moodTip,
+                        ) {
+                            Box(
+                                Modifier.size(72.dp).clip(CircleShape).clickable(onClickLabel = "Show mood") { scope.launch { moodTip.show() } },
+                                contentAlignment = Alignment.Center,
+                            ) { CatFace(mood, Modifier.size(60.dp), description = moodText) }
                         }
                         RunningCat(Modifier.weight(1f).height(72.dp))
                         Column(Modifier.width(104.dp), horizontalAlignment = Alignment.End) {
@@ -176,7 +214,7 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
                 }
 
                 if (monthTx.isEmpty()) item(key = "empty") { EmptyState("Nothing recorded in ${Dates.month(month)}.\nTap + to add one.") }
-                txnDayGroups(monthTx, lk) { nav.navigate(Routes.edit(it.id)) }
+                txnDayGroups(lk.merged(monthTx), lk) { nav.navigate(Routes.edit(it.id)) }
             }
         }
 

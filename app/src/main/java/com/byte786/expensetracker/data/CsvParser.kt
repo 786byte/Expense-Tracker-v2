@@ -27,7 +27,10 @@ object CsvParser {
         val subcategory: String?,
         val account: String,
         val toAccount: String?,
+        /** Title (first line of the note). */
         val memo: String,
+        /** The rest of a multi-line note, or the DESCRIPTION column. */
+        val description: String = "",
     )
 
     data class Result(val rows: List<Row>, val errors: List<String>)
@@ -133,7 +136,8 @@ object CsvParser {
         val cSub = col("SUBCATEGORY", "SUB CATEGORY", "SUB-CATEGORY")
         val cAcc = col("ACCOUNT", "FROM ACCOUNT")
         val cTo = col("TO ACCOUNT", "TO")
-        val cMemo = col("NOTES", "NOTE", "MEMO", "DESCRIPTION")
+        val cMemo = col("NOTES", "NOTE", "MEMO", "TITLE")
+        val cDesc = col("DESCRIPTION")
         if (cDate < 0 || cAmount < 0 || cAcc < 0) {
             return Result(emptyList(), listOf("Couldn't find the TIME/DATE, AMOUNT and ACCOUNT columns in the first line"))
         }
@@ -156,13 +160,23 @@ object CsvParser {
             }
             if (from.isEmpty()) { errors.add("Row $n: no account"); return@forEachIndexed }
             if (type == TxnType.TRANSFER && to == null) { errors.add("Row $n: transfer without a destination account"); return@forEachIndexed }
+            val note = get(cMemo).trim()
+            val title: String
+            val description: String
+            if (cDesc >= 0) {
+                title = note; description = get(cDesc).trim()
+            } else {
+                title = note.substringBefore('\n').trim()
+                description = if ('\n' in note) note.substringAfter('\n').trim() else ""
+            }
             rows.add(
                 Row(
                     line = n, date = date, type = type, amount = amount,
                     category = if (type == TxnType.TRANSFER) null else cleanName(get(cCat)),
                     subcategory = if (type == TxnType.TRANSFER) null else cleanName(get(cSub)),
                     account = from, toAccount = if (type == TxnType.TRANSFER) to else null,
-                    memo = get(cMemo).trim(),
+                    memo = title,
+                    description = description,
                 )
             )
         }

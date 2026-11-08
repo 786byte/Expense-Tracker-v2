@@ -116,6 +116,7 @@ object CsvImport {
                 accountId = accountId(r.account),
                 toAccountId = r.toAccount?.let { accountId(it) },
                 categoryId = catId, subcategoryId = subId, memo = r.memo,
+                description = r.description.ifBlank { null },
             )
             if (!existingKeys.add(key(t))) { duplicates++; continue }
             toInsert.add(t)

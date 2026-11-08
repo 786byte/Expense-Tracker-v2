@@ -48,11 +48,27 @@ class Repository(private val ctx: Context) {
 
     suspend fun saveTxn(t: Txn): Long = dao.putTxn(t).also { changed() }
 
-    suspend fun deleteTxn(t: Txn) {
-        dao.deleteTxn(t)
-        t.photo?.let { photoFile(it).delete() }
+    /** Saves a bill: replaces the records [oldIds] (empty for a new one) with [records]. */
+    suspend fun saveRecords(oldIds: List<Long>, records: List<Txn>, oldPhoto: String?) {
+        dao.replaceTxns(oldIds, records)
+        if (oldPhoto != null && records.none { it.photo == oldPhoto }) deletePhotoIfUnused(oldPhoto)
         changed()
     }
+
+    /** Deletes a record, and the other parts of it when it was paid from several accounts. */
+    suspend fun deleteTxn(t: Txn) {
+        val members = t.groupId?.let { dao.group(it) }.orEmpty().ifEmpty { listOf(t) }
+        dao.deleteTxnIds(members.map { it.id })
+        members.mapNotNull { it.photo }.distinct().forEach { deletePhotoIfUnused(it) }
+        changed()
+    }
+
+    private suspend fun deletePhotoIfUnused(name: String) {
+        if (dao.photoUsage(name) == 0) photoFile(name).delete()
+    }
+
+    /** Filled by voice input on Home; picked up by the Add screen it opens. */
+    @Volatile var voiceDraft: VoiceParser.Draft? = null
 
     suspend fun saveCategory(c: Category): Long = dao.putCategory(c).also { changed() }
     suspend fun deleteCategory(c: Category) { dao.deleteCategory(c); changed() }

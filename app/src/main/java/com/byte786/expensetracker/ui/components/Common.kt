@@ -70,9 +70,23 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /** Fast lookups of categories/accounts by id, plus display helpers for a transaction. */
-class Lookup(cats: List<Category>, accs: List<Account>) {
+class Lookup(cats: List<Category>, accs: List<Account>, txns: List<Txn> = emptyList()) {
     val cat: Map<Long, Category> = cats.associateBy { it.id }
     val acc: Map<Long, Account> = accs.associateBy { it.id }
+    /** Parts of bills paid from several accounts, by groupId. */
+    val groups: Map<Long, List<Txn>> = txns.filter { it.groupId != null }.groupBy { it.groupId!! }
+
+    /**
+     * For display: each bill paid from several accounts becomes one record
+     * (the first part, carrying the bill's whole amount).
+     */
+    fun merged(list: List<Txn>): List<Txn> {
+        val seen = HashSet<Long>()
+        return list.mapNotNull { t ->
+            val g = t.groupId ?: return@mapNotNull t
+            if (!seen.add(g)) null else t.copy(amount = groups[g]?.sumOf { it.amount } ?: t.amount)
+        }
+    }
 
     fun title(t: Txn): String {
         if (t.type == TxnType.TRANSFER) return "Transfer"
@@ -82,6 +96,10 @@ class Lookup(cats: List<Category>, accs: List<Account>) {
     }
 
     fun accountText(t: Txn): String {
+        t.groupId?.let { g ->
+            val parts = groups[g]
+            if (parts != null && parts.size > 1) return parts.joinToString(" + ") { acc[it.accountId]?.name ?: "?" }
+        }
         val from = acc[t.accountId]?.name ?: "?"
         return if (t.type == TxnType.TRANSFER) "$from → ${t.toAccountId?.let { acc[it]?.name } ?: "?"}" else from
     }
@@ -93,7 +111,8 @@ class Lookup(cats: List<Category>, accs: List<Account>) {
     }
 
     /** Text used by search. */
-    fun searchable(t: Txn): String = listOf(title(t), accountText(t), t.memo, Money.toInput(t.amount)).joinToString(" ")
+    fun searchable(t: Txn): String =
+        listOf(title(t), accountText(t), t.memo, t.description.orEmpty(), Money.toInput(t.amount)).joinToString(" ")
 }
 
 @Composable

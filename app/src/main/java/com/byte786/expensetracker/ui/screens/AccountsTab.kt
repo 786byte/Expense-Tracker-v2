@@ -92,7 +92,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
     val txns by repo.txns.collectAsState()
     val cats by repo.categories.collectAsState()
     val accs by repo.accounts.collectAsState()
-    val lk = remember(cats, accs) { Lookup(cats, accs.map { it.account }) }
+    val lk = remember(cats, accs, txns) { Lookup(cats, accs.map { it.account }, txns) }
     val currency = LocalCurrency.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -218,7 +218,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                     val list = txns.filter {
                         inPeriod(it) && if (isAcc) it.accountId == accId || it.toAccountId == accId
                         else it.categoryId == catId && it.subcategoryId == (if (subId == NO_SUB) null else subId)
-                    }
+                    }.let { if (isAcc) it else lk.merged(it) }
                     item(key = "detail-head") { Column {
                         val title = if (isAcc) lk.acc[accId]?.name ?: "" else
                             (lk.cat[catId]?.name ?: "") + " › " + (if (subId == NO_SUB) "No subcategory" else lk.cat[subId]?.name ?: "")

@@ -111,7 +111,7 @@ object Backup {
         val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         fun esc(s: String) = "\"" + s.replace("\"", "\"\"") + "\""
         openOut(ctx, uri).bufferedWriter().use { w ->
-            w.write("Date,Type,Amount,Account,To account,Category,Subcategory,Memo\n")
+            w.write("Date,Type,Amount,Account,To account,Category,Subcategory,Title,Description\n")
             repo.dao.allTxns().forEach { t ->
                 val type = when (t.type) { TxnType.INCOME -> "Income"; TxnType.TRANSFER -> "Transfer"; else -> "Expense" }
                 val row = listOf(
@@ -123,6 +123,7 @@ object Backup {
                     t.categoryId?.let { cats[it]?.name } ?: "",
                     t.subcategoryId?.let { cats[it]?.name } ?: "",
                     t.memo,
+                    t.description.orEmpty(),
                 )
                 w.write(row.joinToString(",") { esc(it) })
                 w.write("\n")
@@ -159,11 +160,14 @@ object Backup {
         put("categoryId", categoryId ?: JSONObject.NULL)
         put("subcategoryId", subcategoryId ?: JSONObject.NULL)
         put("memo", memo); put("photo", photo ?: JSONObject.NULL)
+        put("description", description ?: JSONObject.NULL)
+        put("groupId", groupId ?: JSONObject.NULL)
     }
     private fun JSONObject.toTxn() = Txn(
         id = getLong("id"), type = getInt("type"), amount = getLong("amount"), date = getLong("date"),
         accountId = getLong("accountId"), toAccountId = optLongOrNull("toAccountId"),
         categoryId = optLongOrNull("categoryId"), subcategoryId = optLongOrNull("subcategoryId"),
         memo = optString("memo", ""), photo = optStringOrNull("photo"),
+        description = optStringOrNull("description"), groupId = optLongOrNull("groupId"),
     )
 }

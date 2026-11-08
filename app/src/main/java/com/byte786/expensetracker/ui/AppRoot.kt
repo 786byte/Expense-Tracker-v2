@@ -76,7 +76,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.byte786.expensetracker.ExpenseApp
 import com.byte786.expensetracker.ui.components.CatFace
-import com.byte786.expensetracker.ui.components.CatMood
+import com.byte786.expensetracker.ui.components.statusMood
 import com.byte786.expensetracker.ui.components.DatePickDialog
 import com.byte786.expensetracker.ui.components.MonthPickerDialog
 import com.byte786.expensetracker.ui.screens.AccountsTab
@@ -203,7 +203,17 @@ private fun AppDrawer(nav: NavHostController, close: () -> Unit) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
             Row(Modifier.padding(start = 20.dp, top = 20.dp, bottom = 12.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                CatFace(if (total < 0) CatMood.CRYING else CatMood.HAPPY, Modifier.size(48.dp))
+                val txns by repo.txns.collectAsState()
+                val (cf, ct) = Dates.monthRange(YearMonth.now())
+                val nowTx = txns.filter { it.date >= cf && it.date < ct }
+                CatFace(
+                    statusMood(
+                        total,
+                        nowTx.filter { it.type == com.byte786.expensetracker.data.TxnType.INCOME }.sumOf { it.amount },
+                        nowTx.filter { it.type == com.byte786.expensetracker.data.TxnType.EXPENSE }.sumOf { it.amount },
+                    ),
+                    Modifier.size(48.dp),
+                )
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("Expense Tracker", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)

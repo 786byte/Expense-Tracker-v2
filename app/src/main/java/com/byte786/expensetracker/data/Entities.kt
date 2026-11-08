@@ -58,7 +58,15 @@ data class Txn(
     val toAccountId: Long? = null,
     val categoryId: Long? = null,
     val subcategoryId: Long? = null,
+    /** The title: shown in lists. */
     val memo: String = "",
     /** File name inside the app's photos folder. */
     val photo: String? = null,
+    /** Longer note, only shown when the record is opened. */
+    val description: String? = null,
+    /**
+     * Records that make up one bill paid from several accounts share a groupId
+     * (one record per account). Null for a normal record.
+     */
+    val groupId: Long? = null,
 )

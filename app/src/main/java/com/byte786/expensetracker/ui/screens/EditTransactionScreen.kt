@@ -4,6 +4,7 @@ package com.byte786.expensetracker.ui.screens
 
 import android.app.TimePickerDialog
 import android.net.Uri
+import android.speech.RecognizerIntent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,19 +28,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -75,8 +78,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,22 +87,30 @@ import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.byte786.expensetracker.ExpenseApp
-import com.byte786.expensetracker.data.Category
+import com.byte786.expensetracker.data.Account
 import com.byte786.expensetracker.data.Photos
 import com.byte786.expensetracker.data.Txn
 import com.byte786.expensetracker.data.TxnType
+import com.byte786.expensetracker.data.VoiceParser
 import com.byte786.expensetracker.ui.Dates
 import com.byte786.expensetracker.ui.Money
-import com.byte786.expensetracker.ui.Routes
+import com.byte786.expensetracker.ui.components.CalculatorSheet
 import com.byte786.expensetracker.ui.components.CategoryIcon
+import com.byte786.expensetracker.ui.components.CategorySheet
 import com.byte786.expensetracker.ui.components.ConfirmDialog
 import com.byte786.expensetracker.ui.components.DatePickDialog
+import com.byte786.expensetracker.ui.components.SubcategorySheet
+import com.byte786.expensetracker.ui.components.VoiceInput
 import com.byte786.expensetracker.ui.components.amountColor
 import com.byte786.expensetracker.ui.theme.LocalCurrency
+import com.byte786.expensetracker.ui.theme.MoneyColors
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDateTime
 import java.util.UUID
+
+private const val CALC_NONE = -2
+private const val CALC_TOTAL = -1
 
 @Composable
 fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
@@ -110,40 +119,71 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val cats by repo.categories.collectAsState()
-    val accs by repo.accounts.collectAsState()
+    val accBalances by repo.accounts.collectAsState()
+    val accs = accBalances.map { it.account }
     val currency = LocalCurrency.current
 
     var loaded by rememberSaveable { mutableStateOf(id == 0L) }
     var type by rememberSaveable { mutableIntStateOf(initialType) }
-    var amountText by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableLongStateOf(0L) }
     var catId by rememberSaveable { mutableStateOf<Long?>(null) }
     var subId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var accountId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Sources: account of each part; srcAmt[0] is unused (the first source gets whatever is left).
+    var srcAcc by rememberSaveable { mutableStateOf(longArrayOf()) }
+    var srcAmt by rememberSaveable { mutableStateOf(longArrayOf()) }
     var toAccountId by rememberSaveable { mutableStateOf<Long?>(null) }
     var date by rememberSaveable { mutableLongStateOf(System.currentTimeMillis()) }
-    var memo by rememberSaveable { mutableStateOf("") }
+    var title by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
     var photo by rememberSaveable { mutableStateOf<String?>(null) }
     var originalPhoto by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingCamera by rememberSaveable { mutableStateOf<String?>(null) }
+    var oldIds by rememberSaveable { mutableStateOf(longArrayOf()) }
+    var groupId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var calcFor by rememberSaveable { mutableIntStateOf(if (id == 0L && repo.voiceDraft == null) CALC_TOTAL else CALC_NONE) }
 
     var pickDate by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var viewPhoto by remember { mutableStateOf(false) }
-    var addSubFor by remember { mutableStateOf<Category?>(null) }
+    var catSheet by remember { mutableStateOf(false) }
+    var subSheet by remember { mutableStateOf(false) }
+
+    fun applyDraft(d: VoiceParser.Draft) {
+        type = d.type
+        d.total?.let { amount = it }
+        if (d.type != TxnType.TRANSFER) { catId = d.categoryId; subId = d.subcategoryId }
+        if (d.sources.isNotEmpty()) {
+            srcAcc = d.sources.map { it.first }.toLongArray()
+            srcAmt = d.sources.map { it.second ?: 0L }.toLongArray()
+        }
+        d.toAccountId?.let { toAccountId = it }
+        if (d.title.isNotBlank()) title = d.title
+        if (description.isBlank()) description = "Said: \"${d.heard}\""
+        if (d.daysAgo > 0) date = Dates.millis(Dates.local(date).minusDays(d.daysAgo.toLong()))
+        calcFor = if (d.total == null) CALC_TOTAL else CALC_NONE
+    }
 
     LaunchedEffect(id) {
         if (!loaded) {
             repo.dao.txn(id)?.let { t ->
-                type = t.type; amountText = Money.toInput(t.amount); catId = t.categoryId; subId = t.subcategoryId
-                accountId = t.accountId; toAccountId = t.toAccountId; date = t.date; memo = t.memo
+                val parts = t.groupId?.let { repo.dao.group(it) }.orEmpty().ifEmpty { listOf(t) }
+                type = t.type; amount = parts.sumOf { it.amount }
+                catId = t.categoryId; subId = t.subcategoryId
+                srcAcc = parts.map { it.accountId }.toLongArray(); srcAmt = parts.map { it.amount }.toLongArray()
+                toAccountId = t.toAccountId; date = t.date
+                title = t.memo; description = t.description.orEmpty()
                 photo = t.photo; originalPhoto = t.photo
+                oldIds = parts.map { it.id }.toLongArray(); groupId = t.groupId
             }
             loaded = true
         }
     }
+    LaunchedEffect(Unit) {
+        if (id == 0L) repo.voiceDraft?.let { repo.voiceDraft = null; applyDraft(it) }
+    }
     LaunchedEffect(accs) {
-        if (accountId == null) accountId = accs.firstOrNull()?.account?.id
-        if (toAccountId == null) toAccountId = accs.getOrNull(1)?.account?.id
+        if (srcAcc.isEmpty() && accs.isNotEmpty()) { srcAcc = longArrayOf(accs.first().id); srcAmt = longArrayOf(0L) }
+        if (toAccountId == null) toAccountId = accs.getOrNull(1)?.id
     }
 
     /** Leave without saving: throw away a photo that was added during this edit. */
@@ -153,6 +193,13 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
     }
     BackHandler { cancel() }
 
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val heard = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (!heard.isNullOrBlank()) {
+            description = ""
+            applyDraft(VoiceInput.parse(heard, cats, accs))
+        }
+    }
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
             val name = Photos.import(ctx, uri, repo.photosDir)
@@ -177,52 +224,56 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
     fun openCamera() {
         val dir = File(ctx.cacheDir, "camera").apply { mkdirs() }
         val name = "${UUID.randomUUID()}.jpg"
-        val file = File(dir, name)
         pendingCamera = name
-        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", file)
-        runCatching { cameraLauncher.launch(uri) }.onFailure {
-            scope.launch { snackbar.showSnackbar("No camera app found") }
-        }
+        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", File(dir, name))
+        runCatching { cameraLauncher.launch(uri) }.onFailure { scope.launch { snackbar.showSnackbar("No camera app found") } }
     }
 
+    val split = type != TxnType.TRANSFER && srcAcc.size > 1
+    val rest = amount - srcAmt.drop(1).sum()
+
     fun save() {
-        val amount = Money.parse(amountText)
-        val acc = accountId
         val error = when {
-            amount == null || amount <= 0 -> "Enter an amount"
-            acc == null -> "Add an account first (menu → Accounts)"
-            type == TxnType.TRANSFER && (toAccountId == null || toAccountId == acc) -> "Choose a different account to transfer to"
+            amount <= 0 -> "Enter an amount"
+            srcAcc.isEmpty() -> "Add an account first (Accounts tab → Edit)"
+            type == TxnType.TRANSFER && (toAccountId == null || toAccountId == srcAcc[0]) -> "Choose a different account to transfer to"
+            split && srcAmt.drop(1).any { it <= 0 } -> "Enter an amount for each extra source"
+            split && rest <= 0 -> "The extra sources add up to the whole amount or more"
+            split && srcAcc.toSet().size != srcAcc.size -> "Each source must be a different account"
             else -> null
         }
-        if (error != null) {
-            scope.launch { snackbar.showSnackbar(error) }
-            return
-        }
-        val t = Txn(
-            id = id, type = type, amount = amount!!, date = date, accountId = acc!!,
+        if (error != null) { scope.launch { snackbar.showSnackbar(error) }; return }
+        val base = Txn(
+            type = type, amount = amount, date = date, accountId = srcAcc[0],
             toAccountId = if (type == TxnType.TRANSFER) toAccountId else null,
             categoryId = if (type == TxnType.TRANSFER) null else catId,
             subcategoryId = if (type == TxnType.TRANSFER) null else subId,
-            memo = memo.trim(), photo = photo,
+            memo = title.trim(), photo = photo, description = description.trim().ifBlank { null },
         )
+        val records = if (!split) {
+            listOf(base.copy(id = if (oldIds.size == 1) oldIds[0] else 0L))
+        } else {
+            val g = groupId ?: System.currentTimeMillis()
+            srcAcc.mapIndexed { i, a -> base.copy(amount = if (i == 0) rest else srcAmt[i], accountId = a, groupId = g) }
+        }
         scope.launch {
-            repo.saveTxn(t)
-            if (originalPhoto != null && originalPhoto != photo) repo.photoFile(originalPhoto!!).delete()
+            repo.saveRecords(oldIds.toList(), records, originalPhoto)
             nav.popBackStack()
         }
     }
 
-    val parents = cats.filter { it.parentId == null && it.type == type }
-    val subs = catId?.let { p -> cats.filter { it.parentId == p } } ?: emptyList()
+    val cat = catId?.let { c -> cats.firstOrNull { it.id == c } }
+    val sub = subId?.let { s -> cats.firstOrNull { it.id == s } }
     val ldt = Dates.local(date)
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(if (id == 0L) "Add" else "Edit") },
+                title = { Text(if (id == 0L) "Add" else "Edit", fontWeight = FontWeight.Black) },
                 navigationIcon = { IconButton(onClick = { cancel() }) { Icon(Icons.Filled.Close, "Cancel") } },
                 actions = {
+                    IconButton(onClick = { VoiceInput.launch(ctx, voiceLauncher) }) { Icon(Icons.Filled.Mic, "Fill by voice") }
                     if (id != 0L) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "Delete") }
                     IconButton(onClick = { save() }) { Icon(Icons.Filled.Check, "Save") }
                 },
@@ -237,64 +288,90 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
                 listOf("Expense", "Income", "Transfer").forEachIndexed { i, label ->
                     SegmentedButton(
                         selected = type == i,
-                        onClick = {
-                            if (type != i) { type = i; catId = null; subId = null }
-                        },
+                        onClick = { if (type != i) { type = i; catId = null; subId = null } },
                         shape = SegmentedButtonDefaults.itemShape(i, 3),
                     ) { Text(label) }
                 }
             }
 
-            OutlinedTextField(
-                value = amountText,
-                onValueChange = { v -> if (v.all { it.isDigit() || it == '.' || it == ',' }) amountText = v },
-                label = { Text("Amount") },
-                prefix = { Text(currency) },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.headlineMedium.copy(color = amountColor(type), fontWeight = FontWeight.SemiBold),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // Amount (opens the calculator)
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+                    .clickable { calcFor = CALC_TOTAL }.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (split) "Total amount" else "Amount", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (amount > 0) Money.format(amount, currency) else "Tap to enter",
+                        fontSize = 28.sp, fontWeight = FontWeight.Black,
+                        color = if (amount > 0) amountColor(type) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(Icons.Filled.Calculate, "Calculator", tint = MaterialTheme.colorScheme.primary)
+            }
 
-            if (type == TxnType.TRANSFER) {
-                AccountChooser("From account", accs.map { it.account }, accountId) { accountId = it }
-                AccountChooser("To account", accs.map { it.account }, toAccountId) { toAccountId = it }
+            if (type != TxnType.TRANSFER) {
+                // Category and subcategory buttons
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PickerButton("Category", cat?.name ?: "Choose", Modifier.weight(1f), icon = cat?.let { it.icon to it.color }) { catSheet = true }
+                    PickerButton(
+                        "Subcategory", if (cat == null) "—" else sub?.name ?: "None", Modifier.weight(1f),
+                        enabled = cat != null,
+                    ) { subSheet = true }
+                }
+
+                // Sources
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(if (type == TxnType.INCOME) "Received in" else "Paid from", style = MaterialTheme.typography.titleSmall)
+                    srcAcc.forEachIndexed { i, a ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AccountPicker(accs, a, Modifier.weight(1f)) { new -> srcAcc = srcAcc.copyOf().also { it[i] = new } }
+                            if (split) {
+                                Spacer(Modifier.width(8.dp))
+                                if (i == 0) {
+                                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(110.dp)) {
+                                        Text("the rest", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(
+                                            Money.format(rest, currency), fontWeight = FontWeight.Black,
+                                            color = if (rest > 0) MaterialTheme.colorScheme.onSurface else MoneyColors.expense,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(48.dp))
+                                } else {
+                                    OutlinedButton(onClick = { calcFor = i }, modifier = Modifier.width(110.dp)) {
+                                        Text(if (srcAmt[i] > 0) Money.format(srcAmt[i], currency) else "Amount", maxLines = 1)
+                                    }
+                                    IconButton(onClick = {
+                                        srcAcc = srcAcc.filterIndexed { k, _ -> k != i }.toLongArray()
+                                        srcAmt = srcAmt.filterIndexed { k, _ -> k != i }.toLongArray()
+                                    }) { Icon(Icons.Filled.Close, "Remove this source") }
+                                }
+                            }
+                        }
+                    }
+                    val unused = accs.firstOrNull { it.id !in srcAcc }
+                    if (unused != null) {
+                        TextButton(onClick = {
+                            srcAcc = srcAcc + unused.id
+                            srcAmt = srcAmt + 0L
+                            calcFor = srcAcc.size - 1
+                        }) {
+                            Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp))
+                            Text(if (type == TxnType.INCOME) "Split into another account" else "Paid from another account too")
+                        }
+                    }
+                }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Category", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { nav.navigate(Routes.ACCOUNTS) }) { Text("Manage") }
+                    Text("From account", style = MaterialTheme.typography.titleSmall)
+                    if (srcAcc.isNotEmpty()) AccountPicker(accs, srcAcc[0], Modifier.fillMaxWidth()) { new ->
+                        srcAcc = longArrayOf(new); srcAmt = longArrayOf(0L)
                     }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        parents.forEach { c ->
-                            CategoryTile(c, selected = c.id == catId) {
-                                if (catId != c.id) { catId = c.id; subId = null }
-                            }
-                        }
-                    }
+                    Text("To account", style = MaterialTheme.typography.titleSmall)
+                    AccountPicker(accs, toAccountId, Modifier.fillMaxWidth()) { toAccountId = it }
                 }
-                val parent = catId?.let { p -> cats.firstOrNull { it.id == p } }
-                if (parent != null) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Subcategory of ${parent.name}", style = MaterialTheme.typography.titleSmall)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(selected = subId == null, onClick = { subId = null }, label = { Text("None") })
-                            subs.forEach { s ->
-                                FilterChip(
-                                    selected = subId == s.id,
-                                    onClick = { subId = s.id },
-                                    label = { Text(s.name) },
-                                    leadingIcon = { CategoryIcon(s.icon, s.color, size = 20.dp) },
-                                )
-                            }
-                            FilterChip(
-                                selected = false, onClick = { addSubFor = parent },
-                                label = { Text("New") }, leadingIcon = { Icon(Icons.Filled.Add, null, Modifier.size(18.dp)) },
-                            )
-                        }
-                    }
-                }
-                AccountChooser(if (type == TxnType.INCOME) "Received in" else "Paid from", accs.map { it.account }, accountId) { accountId = it }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -316,9 +393,15 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
             }
 
             OutlinedTextField(
-                value = memo, onValueChange = { memo = it },
-                label = { Text("Memo / note") },
-                minLines = 2,
+                value = title, onValueChange = { title = it },
+                label = { Text("Title") }, singleLine = true,
+                supportingText = { Text("Shown in lists") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = description, onValueChange = { description = it },
+                label = { Text("Description") }, minLines = 3,
+                supportingText = { Text("Only shown when you open this record") },
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -357,12 +440,32 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
                 }
             }
 
-            Button(onClick = { save() }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Text("Save", fontSize = 16.sp)
-            }
+            Button(onClick = { save() }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Save", fontSize = 16.sp) }
         }
     }
 
+    if (calcFor != CALC_NONE) {
+        val forTotal = calcFor == CALC_TOTAL
+        val idx = calcFor
+        CalculatorSheet(
+            title = if (forTotal) "Amount" else "Amount from ${accs.firstOrNull { it.id == srcAcc.getOrNull(idx) }?.name ?: "this account"}",
+            initialMinor = if (forTotal) amount else srcAmt.getOrElse(idx) { 0L },
+            onDismiss = { calcFor = CALC_NONE },
+        ) { v ->
+            if (forTotal) amount = v else if (idx in srcAmt.indices) srcAmt = srcAmt.copyOf().also { it[idx] = v }
+            calcFor = CALC_NONE
+        }
+    }
+    if (catSheet) {
+        CategorySheet(type, cats, catId, onDismiss = { catSheet = false }) { c ->
+            if (catId != c.id) { catId = c.id; subId = null }
+            catSheet = false
+            if (cats.any { it.parentId == c.id }) subSheet = true
+        }
+    }
+    if (subSheet && cat != null) {
+        SubcategorySheet(cat, cats, subId, onDismiss = { subSheet = false }) { s -> subId = s; subSheet = false }
+    }
     if (pickDate) {
         DatePickDialog(ldt.toLocalDate(), onDismiss = { pickDate = false }) { d ->
             date = Dates.millis(LocalDateTime.of(d, ldt.toLocalTime()))
@@ -370,7 +473,11 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
         }
     }
     if (confirmDelete) {
-        ConfirmDialog("Delete this record?", "This cannot be undone.", onDismiss = { confirmDelete = false }) {
+        ConfirmDialog(
+            "Delete this record?",
+            if (oldIds.size > 1) "All ${oldIds.size} parts of this bill will be deleted. This cannot be undone." else "This cannot be undone.",
+            onDismiss = { confirmDelete = false },
+        ) {
             confirmDelete = false
             scope.launch {
                 repo.dao.txn(id)?.let { repo.deleteTxn(it) }
@@ -386,62 +493,57 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
             }
         }
     }
-    addSubFor?.let { parent ->
-        var name by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { addSubFor = null },
-            title = { Text("New subcategory in ${parent.name}") },
-            text = { OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true) },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (name.isNotBlank()) scope.launch {
-                        val newId = repo.saveCategory(
-                            Category(name = name.trim(), type = parent.type, parentId = parent.id, icon = parent.icon, color = parent.color, sortOrder = 999)
-                        )
-                        subId = newId
-                    }
-                    addSubFor = null
-                }) { Text("Add") }
-            },
-            dismissButton = { TextButton(onClick = { addSubFor = null }) { Text("Cancel") } },
-        )
-    }
 }
 
 @Composable
-private fun CategoryTile(c: Category, selected: Boolean, onClick: () -> Unit) {
-    Column(
-        Modifier.width(76.dp).clip(RoundedCornerShape(12.dp))
-            .then(if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)) else Modifier)
-            .clickable(onClick = onClick).padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        CategoryIcon(c.icon, c.color, size = 44.dp)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            c.name, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center,
-            maxLines = 2, overflow = TextOverflow.Ellipsis,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-        )
-    }
-}
-
-@Composable
-private fun AccountChooser(
+private fun PickerButton(
     label: String,
-    accounts: List<com.byte786.expensetracker.data.Account>,
-    selected: Long?,
-    onSelect: (Long) -> Unit,
+    value: String,
+    modifier: Modifier,
+    icon: Pair<String, Long>? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.titleSmall)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            accounts.forEach { a ->
-                FilterChip(
-                    selected = a.id == selected,
-                    onClick = { onSelect(a.id) },
-                    label = { Text(a.name) },
-                    leadingIcon = { CategoryIcon(a.icon, a.color, size = 20.dp) },
+    Row(
+        modifier.clip(RoundedCornerShape(14.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            CategoryIcon(icon.first, icon.second, size = 32.dp)
+            Spacer(Modifier.width(8.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                value, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(Icons.Filled.ArrowDropDown, null)
+    }
+}
+
+@Composable
+private fun AccountPicker(accounts: List<Account>, selected: Long?, modifier: Modifier, onSelect: (Long) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val a = accounts.firstOrNull { it.id == selected }
+    Box(modifier) {
+        FilterChip(
+            selected = true,
+            onClick = { open = true },
+            label = { Text(a?.name ?: "Choose account", fontWeight = FontWeight.Bold, maxLines = 1) },
+            leadingIcon = a?.let { acc -> @Composable { CategoryIcon(acc.icon, acc.color, size = 22.dp) } },
+            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            accounts.forEach { acc ->
+                DropdownMenuItem(
+                    text = { Text(acc.name) },
+                    leadingIcon = { CategoryIcon(acc.icon, acc.color, size = 24.dp) },
+                    onClick = { onSelect(acc.id); open = false },
                 )
             }
         }

@@ -23,6 +23,22 @@ abstract class AppDao {
     @Delete
     abstract suspend fun deleteTxn(t: Txn)
 
+    @Query("SELECT * FROM transactions WHERE groupId = :groupId ORDER BY id")
+    abstract suspend fun group(groupId: Long): List<Txn>
+
+    @Query("DELETE FROM transactions WHERE id IN (:ids)")
+    abstract suspend fun deleteTxnIds(ids: List<Long>)
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE photo = :name")
+    abstract suspend fun photoUsage(name: String): Int
+
+    /** Replaces the records with [oldIds] by [newOnes] in one go (used when saving a split bill). */
+    @Transaction
+    open suspend fun replaceTxns(oldIds: List<Long>, newOnes: List<Txn>) {
+        if (oldIds.isNotEmpty()) deleteTxnIds(oldIds)
+        insertTxns(newOnes)
+    }
+
     // ---- categories ----
     @Query("SELECT * FROM categories ORDER BY type, sortOrder, name COLLATE NOCASE")
     abstract fun categories(): Flow<List<Category>>

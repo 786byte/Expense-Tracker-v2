@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Search
@@ -51,8 +52,12 @@ private data class GuideTopic(val icon: ImageVector, val title: String, val body
 private val topics = listOf(
     GuideTopic(
         Icons.Filled.Home, "The home screen",
-        "• Top left: the status cat. It cries when your total balance is below zero and smiles when it's above.\n" +
-            "• Middle: the cat chasing money, just for fun.\n" +
+        "• Top left: the status cat. Tap it to see why it feels that way:\n" +
+            "    😿 crying: your total balance is below zero\n" +
+            "    😾 angry: this month you spent more than you earned\n" +
+            "    🐱 neutral: this month is about even (or nothing recorded yet)\n" +
+            "    😺 happy: this month you earned more than you spent\n" +
+            "• Middle: a cat chasing money. There's a different cat for every day of the week.\n" +
             "• Top right: your total balance across all accounts (it can be negative).\n" +
             "• Below: income and expense of the month you're looking at. Tap either to see those records.\n" +
             "• The month box on the right: arrows go back and forward, tapping the name jumps to any month.\n" +
@@ -64,8 +69,25 @@ private val topics = listOf(
             "• Ginger cat with − : Expense\n" +
             "• Black cat with + : Income\n" +
             "• Grey cat with ⇄ : Transfer between your own accounts\n\n" +
-            "Then type the amount, choose a category and (optionally) a subcategory, e.g. Bike › Mobil, " +
-            "the account, date and time, a memo and a photo, and tap Save.",
+            "• Amount: a calculator opens. You can type sums like 600+400-50.\n" +
+            "• Category: tap the button to see all categories as icons and pick one. If it has subcategories, " +
+            "the subcategory list opens next (or tap the Subcategory button). The pencil in each list lets you edit or add.\n" +
+            "• Paid from: the account. Paid from two accounts? Tap “Paid from another account too”, choose the account " +
+            "and how much came from it. The first account automatically gets the rest. It's saved as one bill.\n" +
+            "• Title is shown in lists; Description is only shown when you open the record.\n" +
+            "• Date, time and photo are optional. Then tap Save.",
+    ),
+    GuideTopic(
+        Icons.Filled.Mic, "Adding by voice",
+        "Tap the microphone on Home (or on the Add screen) and speak in English. The app picks out the amount, " +
+            "category, subcategory and accounts from your own names, fills the Add screen, and you check it and tap Save.\n\n" +
+            "Examples:\n" +
+            "• “500 taka bike mobil from cash”\n" +
+            "• “1000 bills, 600 cash 400 bKash” (one bill from two accounts)\n" +
+            "• “got 5000 salary in tuition”\n" +
+            "• “transfer 2000 from cash to bKash”\n" +
+            "• “yesterday 230 for lunch, food restaurant, from cash” (words after “for” become the title)\n\n" +
+            "It uses your phone's speech recognition (the Google app), no AI service.",
     ),
     GuideTopic(
         Icons.Filled.AccountBalanceWallet, "Accounts tab",

@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -17,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
@@ -56,6 +59,10 @@ private object CatPaths {
     val nose = svg("M30 41 h4 l-2 2.5 Z")
     val smile = svg("M32 43.5 q-3 5 -7 1.5 M32 43.5 q3 5 7 1.5")
     val frown = svg("M26 50 q6 -5 12 0")
+    val angryBrows = svg("M18 28 l10 5 M46 28 l-10 5")
+    val angryMouth = svg("M26 49 q6 -4 12 0")
+    val angerMark = svg("M46 11 l3 3 M54 11 l-3 3 M46 20 l3 -3 M54 20 l-3 -3")
+    val flatMouth = svg("M27 47.5 h10")
     val whiskers = svg("M8 40 h9 M8 45 l9 -2 M56 40 h-9 M56 45 l-9 -2")
     val transferArrows = svg("M43 45.5 h9 l-2.5 -2.5 M53 50.5 h-9 l2.5 2.5")
 
@@ -67,7 +74,17 @@ private object CatPaths {
     val runWhiskers = svg("M88 36 h12 M88 38 l11 2")
 }
 
-enum class CatMood { HAPPY, CRYING, PLAIN }
+/** HAPPY = in plus, CRYING = in debt, ANGRY = spent more than earned, NEUTRAL = about even. PLAIN = add-menu cats. */
+enum class CatMood { HAPPY, CRYING, ANGRY, NEUTRAL, PLAIN }
+
+/** The status cat's mood: total balance first, then this month's income vs expense. */
+fun statusMood(totalBalance: Long, monthIncome: Long, monthExpense: Long): CatMood = when {
+    totalBalance < 0 -> CatMood.CRYING
+    monthIncome == 0L && monthExpense == 0L -> CatMood.NEUTRAL
+    kotlin.math.abs(monthIncome - monthExpense) <= maxOf(monthIncome, monthExpense) / 20 -> CatMood.NEUTRAL
+    monthExpense > monthIncome -> CatMood.ANGRY
+    else -> CatMood.HAPPY
+}
 
 /**
  * A round cat face. [badge] (a [TxnType]) adds a small −, + or ⇄ badge,
@@ -124,6 +141,20 @@ fun CatFace(
                     drawPath(CatPaths.nose, nose)
                     drawPath(CatPaths.frown, CatInk, style = Stroke(2.2f, cap = StrokeCap.Round))
                 }
+                CatMood.ANGRY -> {
+                    drawPath(CatPaths.angryBrows, CatInk, style = Stroke(2.6f, cap = StrokeCap.Round))
+                    drawCircle(eyes, 2.4f, Offset(25f, 36.5f))
+                    drawCircle(eyes, 2.4f, Offset(39f, 36.5f))
+                    drawPath(CatPaths.nose, nose)
+                    drawPath(CatPaths.angryMouth, CatInk, style = Stroke(2.2f, cap = StrokeCap.Round))
+                    drawPath(CatPaths.angerMark, Color(0xFFD32F2F), style = Stroke(2.2f, cap = StrokeCap.Round))
+                }
+                CatMood.NEUTRAL -> {
+                    drawCircle(eyes, 2.6f, Offset(25f, 35f))
+                    drawCircle(eyes, 2.6f, Offset(39f, 35f))
+                    drawPath(CatPaths.nose, nose)
+                    drawPath(CatPaths.flatMouth, CatInk, style = Stroke(2.2f, cap = StrokeCap.Round))
+                }
                 CatMood.PLAIN -> {
                     drawCircle(eyes, 2.8f, Offset(25f, 34f))
                     drawCircle(eyes, 2.8f, Offset(39f, 34f))
@@ -146,9 +177,44 @@ fun CatFace(
     }
 }
 
-/** A ginger cat running after a coin. Loops forever. */
+/** Coat colours for the running cat; a different cat each day of the week. */
+data class CatCoat(
+    val name: String,
+    val body: Color,
+    val dark: Color,
+    val eye: Color = CatInk,
+    val stripes: Color? = null,
+    /** Siamese-style darker ears, face, legs and tail. */
+    val points: Color? = null,
+    /** Tuxedo-style white chest, muzzle and paws. */
+    val white: Boolean = false,
+    /** Calico patches drawn on the body: (x, y, radius, colour). */
+    val patches: List<Pair<Offset, Pair<Float, Color>>> = emptyList(),
+) {
+    companion object {
+        val week: List<CatCoat> = listOf(
+            CatCoat("Ginger tabby", CatFur, Color(0xFFD27A28), stripes = CatFurDark), // Monday
+            CatCoat("Black cat", Color(0xFF2E2A28), Color(0xFF1B1816), eye = Color(0xFFF2C14E)),
+            CatCoat("White cat", Color(0xFFF7F3EC), Color(0xFFDCD3C6), eye = Color(0xFF3D8FD1)),
+            CatCoat("Grey tabby", Color(0xFF9AA0A6), Color(0xFF7D838A), stripes = Color(0xFF666C73)),
+            CatCoat(
+                "Calico", Color(0xFFFAF4EA), Color(0xFFE0D6C8),
+                patches = listOf(
+                    Offset(42f, 34f) to (9f to CatFur), Offset(62f, 44f) to (8f to Color(0xFF2E2A28)),
+                    Offset(80f, 26f) to (6f to CatFur),
+                ),
+            ),
+            CatCoat("Siamese", Color(0xFFF1E3CC), Color(0xFFD9C6A8), eye = Color(0xFF3D8FD1), points = Color(0xFF5A4033)),
+            CatCoat("Tuxedo", Color(0xFF2E2A28), Color(0xFF1B1816), eye = Color(0xFF8BC34A), white = true), // Sunday
+        )
+
+        fun today(): CatCoat = week[java.time.LocalDate.now().dayOfWeek.value - 1]
+    }
+}
+
+/** A cat running after a coin. Loops forever; the cat changes with the day of the week. */
 @Composable
-fun RunningCat(modifier: Modifier = Modifier) {
+fun RunningCat(modifier: Modifier = Modifier, coat: CatCoat = CatCoat.today()) {
     val inf = rememberInfiniteTransition(label = "run")
     val step by inf.animateFloat(
         -1f, 1f, infiniteRepeatable(tween(320, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "step",
@@ -156,8 +222,10 @@ fun RunningCat(modifier: Modifier = Modifier) {
     val coin by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "coin")
     val ground by inf.animateFloat(0f, 24f, infiniteRepeatable(tween(450, easing = LinearEasing)), label = "ground")
     val measurer = rememberTextMeasurer()
+    val bodyOval = remember { Path().apply { addOval(androidx.compose.ui.geometry.Rect(27f, 28f, 77f, 52f)) } }
+    val headCircle = remember { Path().apply { addOval(androidx.compose.ui.geometry.Rect(70.5f, 19.5f, 93.5f, 42.5f)) } }
 
-    Canvas(modifier.semantics { contentDescription = "A cat running after money" }) {
+    Canvas(modifier.semantics { contentDescription = "${coat.name} running after money" }) {
         val s = min(size.width / 150f, size.height / 72f)
         withTransform({
             translate((size.width - 150f * s) / 2f, (size.height - 72f * s) / 2f)
@@ -175,23 +243,39 @@ fun RunningCat(modifier: Modifier = Modifier) {
                 )
                 drawText(layout, topLeft = Offset(128f - layout.size.width / 2f, 36f - layout.size.height / 2f))
             }
+            val limb = coat.points ?: coat.body
+            val limbBack = coat.points ?: coat.dark
+            val outline = Color(0x33000000)
             translate(0f, -1.5f * (step + 1f)) {
                 rotate(step * 11f, pivot = Offset(28f, 38f)) {
-                    drawPath(CatPaths.tail, CatFur, style = Stroke(5.5f, cap = StrokeCap.Round))
+                    drawPath(CatPaths.tail, limb, style = Stroke(5.5f, cap = StrokeCap.Round))
                 }
                 listOf(36f to 1f, 44f to -1f, 60f to -1f, 68f to 1f).forEachIndexed { i, (x, dir) ->
                     rotate(step * 28f * dir, pivot = Offset(x, 47f)) {
-                        drawLine(if (i % 2 == 0) CatFurDark else CatFur, Offset(x, 47f), Offset(x, 62f), 5.5f, StrokeCap.Round)
+                        drawLine(if (i % 2 == 0) limbBack else limb, Offset(x, 47f), Offset(x, 62f), 5.5f, StrokeCap.Round)
+                        if (coat.white) drawLine(Color.White, Offset(x, 59f), Offset(x, 62f), 5.5f, StrokeCap.Round)
                     }
                 }
-                drawOval(CatFur, topLeft = Offset(27f, 28f), size = Size(50f, 24f))
-                drawPath(CatPaths.stripes, CatFurDark, style = Stroke(2.5f, cap = StrokeCap.Round))
-                drawPath(CatPaths.runEarL, CatFur)
-                drawPath(CatPaths.runEarR, CatFur)
-                drawCircle(CatFur, 11.5f, Offset(82f, 31f))
-                drawCircle(CatInk, 2f, Offset(86f, 29f))
-                drawPath(CatPaths.runNose, CatInk)
-                drawPath(CatPaths.runWhiskers, Whisker, style = Stroke(1.2f, cap = StrokeCap.Round))
+                drawPath(bodyOval, coat.body)
+                if (coat.body.luminance() > 0.8f) drawPath(bodyOval, outline, style = Stroke(1f))
+                clipPath(bodyOval) {
+                    coat.patches.filter { it.first.x < 77f }.forEach { (c, rc) -> drawCircle(rc.second, rc.first, c) }
+                    if (coat.white) drawOval(Color.White, topLeft = Offset(58f, 40f), size = Size(22f, 16f))
+                }
+                coat.stripes?.let { drawPath(CatPaths.stripes, it, style = Stroke(2.5f, cap = StrokeCap.Round)) }
+                drawPath(CatPaths.runEarL, limb)
+                drawPath(CatPaths.runEarR, limb)
+                drawPath(headCircle, coat.body)
+                if (coat.body.luminance() > 0.8f) drawPath(headCircle, outline, style = Stroke(1f))
+                clipPath(headCircle) {
+                    coat.patches.filter { it.first.x >= 77f }.forEach { (c, rc) -> drawCircle(rc.second, rc.first, c) }
+                    coat.points?.let { drawCircle(it, 7f, Offset(89f, 34f)) }
+                    if (coat.white) drawCircle(Color.White, 5.5f, Offset(90f, 37f))
+                }
+                drawCircle(coat.eye, 2.2f, Offset(86f, 29f))
+                drawCircle(CatInk, 1.1f, Offset(86.5f, 29f))
+                drawPath(CatPaths.runNose, if (coat.body.luminance() < 0.2f) Blush else CatInk)
+                drawPath(CatPaths.runWhiskers, if (coat.body.luminance() < 0.2f) Color(0xFFBDB5AA) else Whisker, style = Stroke(1.2f, cap = StrokeCap.Round))
             }
         }
     }

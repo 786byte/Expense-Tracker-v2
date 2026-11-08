@@ -86,7 +86,7 @@ fun SearchScreen(
     val txns by repo.txns.collectAsState()
     val cats by repo.categories.collectAsState()
     val accs by repo.accounts.collectAsState()
-    val lk = remember(cats, accs) { Lookup(cats, accs.map { it.account }) }
+    val lk = remember(cats, accs, txns) { Lookup(cats, accs.map { it.account }, txns) }
     val currency = LocalCurrency.current
 
     var query by rememberSaveable { mutableStateOf(initialQuery) }
@@ -109,7 +109,7 @@ fun SearchScreen(
                 (from < 0 || (t.date >= from && t.date < to)) &&
                 (selectedCat == null || (if (selectedCat.parentId == null) t.categoryId == catId else t.subcategoryId == catId)) &&
                 (q.isEmpty() || lk.searchable(t).lowercase().contains(q))
-        }
+        }.let { lk.merged(it) }
     }
     val totalExpense = results.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
     val totalIncome = results.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
