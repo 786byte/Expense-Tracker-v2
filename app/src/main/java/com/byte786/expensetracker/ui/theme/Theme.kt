@@ -2,6 +2,7 @@ package com.byte786.expensetracker.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -13,7 +14,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import com.byte786.expensetracker.ui.Money
+import com.byte786.expensetracker.ui.MoneyStyle
 import androidx.compose.ui.platform.LocalContext
 import com.byte786.expensetracker.ExpenseApp
 
@@ -71,21 +77,150 @@ private val Dark = darkColorScheme(
 /** Currency symbol shown before every amount. */
 val LocalCurrency = staticCompositionLocalOf { "৳" }
 
+/** Changing the money format re-draws every screen (static local). */
+val LocalMoneyStyle = staticCompositionLocalOf { MoneyStyle() }
+
+/** Colours of the status cat, matching the theme. */
+data class CatStyle(val fur: Color, val eyes: Color, val ink: Color, val furDark: Color)
+
+val LocalCatStyle = staticCompositionLocalOf { CatStyle(Color(0xFFE8913A), Color(0xFF2A1F17), Color(0xFF2A1F17), Color(0xFFC46F22)) }
+
+/**
+ * Colour themes, each named after a cat. Ginger keeps the original hand-tuned colours;
+ * the others are derived from a few key colours.
+ */
+enum class CatPalette(
+    val label: String,
+    val lightPrimary: Color,
+    val lightBg: Color,
+    val lightInk: Color,
+    val darkPrimary: Color,
+    val darkBg: Color,
+    val darkInk: Color,
+    val cat: CatStyle,
+) {
+    GINGER(
+        "Ginger", Color(0xFFA8520F), Color(0xFFFFF7EE), Color(0xFF2A1F17), Color(0xFFF2A55E), Color(0xFF1C1611), Color(0xFFF1E2D2),
+        CatStyle(Color(0xFFE8913A), Color(0xFF2A1F17), Color(0xFF2A1F17), Color(0xFFC46F22)),
+    ),
+    MIDNIGHT(
+        "Midnight black cat", Color(0xFF5B4B8A), Color(0xFFF6F4FA), Color(0xFF1D1A24), Color(0xFFF2C14E), Color(0xFF121116), Color(0xFFE9E6F0),
+        CatStyle(Color(0xFF2E2A28), Color(0xFFF2C14E), Color(0xFFE9E1D6), Color(0xFF1B1816)),
+    ),
+    SIAMESE(
+        "Siamese cream", Color(0xFF6F4E37), Color(0xFFFBF6EE), Color(0xFF2B2018), Color(0xFFD9B99B), Color(0xFF1A1714), Color(0xFFF0E6DA),
+        CatStyle(Color(0xFFF1E3CC), Color(0xFF3D8FD1), Color(0xFF4A3426), Color(0xFF5A4033)),
+    ),
+    GREY_TABBY(
+        "Grey tabby", Color(0xFF4F6475), Color(0xFFF4F6F8), Color(0xFF1C2228), Color(0xFFA9C2D6), Color(0xFF15181B), Color(0xFFE2E7EC),
+        CatStyle(Color(0xFF9AA0A6), Color(0xFF2E7D32), Color(0xFF263238), Color(0xFF666C73)),
+    ),
+    CALICO(
+        "Calico", Color(0xFFB0413E), Color(0xFFFFF8F3), Color(0xFF2A1E1C), Color(0xFFF4A79D), Color(0xFF1B1514), Color(0xFFF3E4DF),
+        CatStyle(Color(0xFFFAF4EA), Color(0xFF2A1F17), Color(0xFF2A1F17), Color(0xFFE8913A)),
+    ),
+    ;
+
+    fun scheme(dark: Boolean, amoled: Boolean): ColorScheme {
+        val base = when {
+            this == GINGER && !dark -> Light
+            this == GINGER -> Dark
+            !dark -> derivedLight()
+            else -> derivedDark()
+        }
+        if (!dark || !amoled) return base
+        return base.copy(
+            background = Color.Black, surface = Color.Black,
+            surfaceContainerLowest = Color.Black,
+            surfaceContainerLow = Color(0xFF0B0B0B),
+            surfaceContainer = Color(0xFF121212),
+            surfaceContainerHigh = Color(0xFF1A1A1A),
+            surfaceContainerHighest = Color(0xFF222222),
+        )
+    }
+
+    private fun derivedLight(): ColorScheme {
+        val p = lightPrimary
+        val bg = lightBg
+        val ink = lightInk
+        val muted = lerp(ink, bg, 0.35f)
+        return lightColorScheme(
+            primary = p, onPrimary = Color.White,
+            primaryContainer = lerp(bg, p, 0.22f), onPrimaryContainer = lerp(p, Color.Black, 0.6f),
+            secondary = muted, onSecondary = Color.White,
+            secondaryContainer = lerp(bg, p, 0.10f), onSecondaryContainer = ink,
+            tertiary = Color(0xFF4E5D6C), tertiaryContainer = Color(0xFFDCE6EF),
+            background = bg, onBackground = ink, surface = bg, onSurface = ink,
+            surfaceVariant = lerp(bg, p, 0.10f), onSurfaceVariant = muted,
+            surfaceContainerLowest = Color.White,
+            surfaceContainerLow = lerp(bg, Color.White, 0.5f),
+            surfaceContainer = lerp(bg, p, 0.05f),
+            surfaceContainerHigh = lerp(bg, p, 0.08f),
+            surfaceContainerHighest = lerp(bg, p, 0.11f),
+            outline = lerp(ink, bg, 0.55f), outlineVariant = lerp(bg, p, 0.16f),
+        )
+    }
+
+    private fun derivedDark(): ColorScheme {
+        val p = darkPrimary
+        val bg = darkBg
+        val ink = darkInk
+        val muted = lerp(ink, bg, 0.25f)
+        return darkColorScheme(
+            primary = p, onPrimary = lerp(p, Color.Black, 0.75f),
+            primaryContainer = lerp(bg, p, 0.35f), onPrimaryContainer = lerp(p, Color.White, 0.7f),
+            secondary = muted, secondaryContainer = lerp(bg, p, 0.16f), onSecondaryContainer = ink,
+            tertiary = Color(0xFFB4C8DA),
+            background = bg, onBackground = ink, surface = bg, onSurface = ink,
+            surfaceVariant = lerp(bg, p, 0.16f), onSurfaceVariant = muted,
+            surfaceContainerLowest = lerp(bg, Color.Black, 0.3f),
+            surfaceContainerLow = lerp(bg, p, 0.04f),
+            surfaceContainer = lerp(bg, p, 0.06f),
+            surfaceContainerHigh = lerp(bg, p, 0.10f),
+            surfaceContainerHighest = lerp(bg, p, 0.14f),
+            outline = lerp(ink, bg, 0.45f), outlineVariant = lerp(bg, p, 0.20f),
+        )
+    }
+
+    companion object {
+        fun of(name: String) = entries.firstOrNull { it.name == name } ?: GINGER
+    }
+}
+
+val FontScales = listOf(0.9f, 1f, 1.15f, 1.3f)
+
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
     val prefs = ExpenseApp.instance.repo.prefs
     val mode by prefs.themeMode.collectAsState()
     val dynamic by prefs.dynamicColor.collectAsState()
     val currency by prefs.currency.collectAsState()
+    val paletteName by prefs.palette.collectAsState()
+    val amoled by prefs.amoled.collectAsState()
+    val fontSize by prefs.fontSize.collectAsState()
+    val symbolAfter by prefs.symbolAfter.collectAsState()
+    val decimals by prefs.decimals.collectAsState()
+    val indian by prefs.indianGrouping.collectAsState()
     val dark = when (mode) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
     val ctx = LocalContext.current
+    val palette = CatPalette.of(paletteName)
     val scheme = when {
-        dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-        dark -> Dark
-        else -> Light
+        dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val d = if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
+            if (dark && amoled) d.copy(background = Color.Black, surface = Color.Black, surfaceContainerLowest = Color.Black) else d
+        }
+        else -> palette.scheme(dark, amoled)
     }
-    CompositionLocalProvider(LocalCurrency provides currency) {
+    val moneyStyle = MoneyStyle(symbolAfter = symbolAfter, decimals = decimals, indianGrouping = indian)
+    Money.style = moneyStyle
+    val density = LocalDensity.current
+    val scale = FontScales.getOrElse(fontSize) { 1f }
+    CompositionLocalProvider(
+        LocalCurrency provides currency,
+        LocalMoneyStyle provides moneyStyle,
+        LocalCatStyle provides palette.cat,
+        LocalDensity provides Density(density.density, density.fontScale * scale),
+    ) {
         MaterialTheme(colorScheme = scheme, content = content)
     }
 }

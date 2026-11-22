@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
@@ -90,6 +91,12 @@ fun CategoryEditDialog(initial: Category, cats: List<Category>, onDismiss: () ->
     // A top-level category can only go inside another one if it has no subcategories itself.
     val canMove = !isNew && (initial.parentId != null || cats.none { it.parentId == initial.id })
     val parentChoices = cats.filter { it.parentId == null && it.type == initial.type && it.id != initial.id }
+    // Merge: top-level into another top-level, subcategory into any other subcategory of the same type.
+    val mergeChoices = if (isNew) emptyList() else if (initial.parentId == null) parentChoices
+    else cats.filter { it.parentId != null && it.type == initial.type && it.id != initial.id }
+        .sortedBy { c -> (cats.firstOrNull { it.id == c.parentId }?.name ?: "") + " " + c.name }
+    var mergeMenu by remember { mutableStateOf(false) }
+    var mergeInto by remember { mutableStateOf<Category?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -136,6 +143,32 @@ fun CategoryEditDialog(initial: Category, cats: List<Category>, onDismiss: () ->
                         }
                     }
                 }
+                if (mergeChoices.isNotEmpty()) {
+                    Column {
+                        Text("Merge", style = MaterialTheme.typography.labelLarge)
+                        Box {
+                            OutlinedButton(onClick = { mergeMenu = true }) {
+                                Icon(Icons.Filled.CallMerge, null); Spacer(Modifier.width(6.dp))
+                                Text("Merge into another…")
+                            }
+                            DropdownMenu(expanded = mergeMenu, onDismissRequest = { mergeMenu = false }) {
+                                mergeChoices.forEach { c ->
+                                    val label = c.parentId?.let { p -> "${cats.firstOrNull { it.id == p }?.name ?: "?"} › ${c.name}" } ?: c.name
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        leadingIcon = { CategoryIcon(c.icon, c.color, size = 24.dp) },
+                                        onClick = { mergeInto = c; mergeMenu = false },
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            "Moves all its records" + (if (initial.parentId == null) " and subcategories" else "") +
+                                " into the one you pick, then removes this one.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 IconColorPicker(icon, color, { icon = it }, { color = it })
             }
         },
@@ -159,6 +192,20 @@ fun CategoryEditDialog(initial: Category, cats: List<Category>, onDismiss: () ->
             }
         },
     )
+
+    mergeInto?.let { target ->
+        ConfirmDialog(
+            "Merge ${initial.name} into ${target.name}?",
+            "All records of ${initial.name}" + (if (initial.parentId == null) " and its subcategories" else "") +
+                " move to ${target.name}, and ${initial.name} is removed.",
+            confirm = "Merge",
+            onDismiss = { mergeInto = null },
+        ) {
+            repo.launch { repo.mergeCategory(initial, target) }
+            mergeInto = null
+            onDismiss()
+        }
+    }
 
     confirmDelete?.let { used ->
         val subsNote = if (initial.parentId == null) " Its subcategories will be deleted too." else ""

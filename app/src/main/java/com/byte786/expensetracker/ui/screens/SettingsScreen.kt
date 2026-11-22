@@ -60,6 +60,17 @@ import com.byte786.expensetracker.data.Backup
 import com.byte786.expensetracker.data.BackupScheduler
 import com.byte786.expensetracker.data.CsvImport
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Slider
+import androidx.compose.ui.Alignment
+import com.byte786.expensetracker.data.CatMood
+import com.byte786.expensetracker.ui.Money
+import com.byte786.expensetracker.ui.components.CatFace
+import com.byte786.expensetracker.ui.theme.CatPalette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import com.byte786.expensetracker.ui.Dates
@@ -78,6 +89,18 @@ fun SettingsScreen(nav: NavController, action: String = "") {
     val currency by prefs.currency.collectAsState()
     val themeMode by prefs.themeMode.collectAsState()
     val dynamic by prefs.dynamicColor.collectAsState()
+    val paletteName by prefs.palette.collectAsState()
+    val amoled by prefs.amoled.collectAsState()
+    val fontSize by prefs.fontSize.collectAsState()
+    val listIconSub by prefs.listIconSub.collectAsState()
+    val symbolAfter by prefs.symbolAfter.collectAsState()
+    val decimals by prefs.decimals.collectAsState()
+    val indian by prefs.indianGrouping.collectAsState()
+    val homeOrder by prefs.homeOrder.collectAsState()
+    val homeHidden by prefs.homeHidden.collectAsState()
+    val neutralPct by prefs.moodNeutralPct.collectAsState()
+    val veryPct by prefs.moodVeryPct.collectAsState()
+    var confirmIcons by remember { mutableStateOf(false) }
     val backupUri by prefs.backupUri.collectAsState()
     val autoBackup by prefs.autoBackup.collectAsState()
     val lastBackup by prefs.lastBackup.collectAsState()
@@ -256,26 +279,107 @@ fun SettingsScreen(nav: NavController, action: String = "") {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Appearance", style = MaterialTheme.typography.titleMedium)
+                    Text("Theme", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CatPalette.entries.forEach { p ->
+                            FilterChip(
+                                selected = paletteName == p.name && !dynamic,
+                                onClick = { prefs.setPalette(p.name); if (dynamic) prefs.setDynamicColor(false) },
+                                label = { Text(p.label) },
+                                leadingIcon = {
+                                    CatFace(CatMood.PLAIN, Modifier.size(22.dp), fur = p.cat.fur, eyes = p.cat.eyes, nose = p.cat.ink, animate = false)
+                                },
+                            )
+                        }
+                    }
+                    Text("Light or dark", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("System", "Light", "Dark").forEachIndexed { i, label ->
                             FilterChip(selected = themeMode == i, onClick = { prefs.setThemeMode(i) }, label = { Text(label) })
                         }
                     }
+                    SwitchRow("Pure black (AMOLED)", "Black backgrounds in dark mode; saves battery on OLED screens", amoled) { prefs.setAmoled(it) }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Wallpaper colors")
-                                Text("Match the app to your phone's theme", style = MaterialTheme.typography.bodySmall)
+                        SwitchRow("Wallpaper colors", "Match the app to your phone's theme instead of a cat theme", dynamic) { prefs.setDynamicColor(it) }
+                    }
+                    Text("Text size", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Small", "Normal", "Large", "Huge").forEachIndexed { i, label ->
+                            FilterChip(selected = fontSize == i, onClick = { prefs.setFontSize(i) }, label = { Text(label) })
+                        }
+                    }
+                    Text("Icon on records in lists", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !listIconSub, onClick = { prefs.setListIconSub(false) }, label = { Text("Category") })
+                        FilterChip(selected = listIconSub, onClick = { prefs.setListIconSub(true) }, label = { Text("Subcategory") })
+                    }
+                    OutlinedButton(onClick = { confirmIcons = true }) {
+                        Icon(Icons.Filled.AutoFixHigh, null); Spacer(Modifier.width(6.dp)); Text("Pick icons from category names")
+                    }
+                }
+            }
+
+            // ---------- Home layout ----------
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Home screen", style = MaterialTheme.typography.titleMedium)
+                    Text("Show", style = MaterialTheme.typography.labelLarge)
+                    listOf(
+                        "statusCat" to "Status cat (top left)",
+                        "runningCat" to "Running cat",
+                        "balance" to "Total balance",
+                        "totals" to "Month income & expense",
+                    ).forEach { (key, label) ->
+                        SwitchRow(label, null, key !in homeHidden) { on ->
+                            prefs.setHomeHidden(if (on) homeHidden - key else homeHidden + key)
+                        }
+                    }
+                    Text("Order", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                    val names = mapOf("hero" to "Cats & balance", "totals" to "Month totals & switcher", "records" to "Records")
+                    homeOrder.forEachIndexed { i, key ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${i + 1}. ${names[key] ?: key}", Modifier.weight(1f))
+                            IconButton(onClick = { prefs.setHomeOrder(homeOrder.toMutableList().apply { add(i - 1, removeAt(i)) }) }, enabled = i > 0) {
+                                Icon(Icons.Filled.KeyboardArrowUp, "Move up")
                             }
-                            Switch(checked = dynamic, onCheckedChange = { prefs.setDynamicColor(it) })
+                            IconButton(onClick = { prefs.setHomeOrder(homeOrder.toMutableList().apply { add(i + 1, removeAt(i)) }) }, enabled = i < homeOrder.size - 1) {
+                                Icon(Icons.Filled.KeyboardArrowDown, "Move down")
+                            }
                         }
                     }
                 }
             }
 
+            // ---------- Status cat ----------
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Status cat", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "The cat compares your total balance with your usual monthly income (average of the last 3 months).",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text("“About even” within ±$neutralPct% of it", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                    Slider(
+                        value = neutralPct.toFloat(), onValueChange = { prefs.setMoodNeutralPct(it.toInt()) },
+                        valueRange = 0f..50f, steps = 9,
+                    )
+                    Text("“Very” in debt or in plus beyond $veryPct%", style = MaterialTheme.typography.labelLarge)
+                    Slider(
+                        value = veryPct.toFloat(), onValueChange = { prefs.setMoodVeryPct(it.toInt()) },
+                        valueRange = 20f..300f, steps = 27,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        listOf(CatMood.VERY_DEBT, CatMood.DEBT, CatMood.ANGRY, CatMood.NEUTRAL, CatMood.PLUS, CatMood.RICH).forEach {
+                            CatFace(it, Modifier.size(40.dp), animate = false)
+                        }
+                    }
+                }
+            }
+
+            // ---------- Currency ----------
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Currency symbol", style = MaterialTheme.typography.titleMedium)
+                    Text("Currency", style = MaterialTheme.typography.titleMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("৳", "Tk ", "$", "€", "£", "₹").forEach { s ->
                             FilterChip(selected = currency == s, onClick = { prefs.setCurrency(s) }, label = { Text(s.trim()) })
@@ -283,9 +387,32 @@ fun SettingsScreen(nav: NavController, action: String = "") {
                     }
                     OutlinedTextField(
                         value = currency, onValueChange = { if (it.length <= 5) prefs.setCurrency(it) },
-                        label = { Text("Custom") }, singleLine = true,
+                        label = { Text("Custom symbol") }, singleLine = true,
+                    )
+                    SwitchRow("Symbol after the number", "1,250 ৳ instead of ৳1,250", symbolAfter) { prefs.setSymbolAfter(it) }
+                    SwitchRow("Show paisa / cents", "৳1,250.50; off rounds to whole taka", decimals) { prefs.setDecimals(it) }
+                    SwitchRow("Indian / Bangladeshi grouping", "1,00,000 instead of 100,000", indian) { prefs.setIndianGrouping(it) }
+                    Text(
+                        "Example: " + Money.format(123456750, currency),
+                        style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     )
                 }
+            }
+        }
+    }
+
+    if (confirmIcons) {
+        ConfirmDialog(
+            "Pick icons from names?",
+            "Every category gets an icon that matches its name (e.g. Deen → mosque, Fragrance → perfume, Pulsar → bike). " +
+                "Icons you made from your own pictures are kept. You can still change any icon afterwards.",
+            confirm = "Update icons",
+            onDismiss = { confirmIcons = false },
+        ) {
+            confirmIcons = false
+            scope.launch {
+                val n = repo.refreshCategoryIcons()
+                snackbar.showSnackbar(if (n == 0) "All icons already match" else "Updated $n icon(s)")
             }
         }
     }
@@ -302,7 +429,7 @@ fun SettingsScreen(nav: NavController, action: String = "") {
                     if (s.newCategories.isNotEmpty()) Text("New categories: ${s.newCategories.joinToString()}")
                     if (s.newAccounts.isNotEmpty()) {
                         Text(
-                            "Tip: set each account's starting balance (menu → Accounts) so the balances match reality.",
+                            "Tip: set each account's starting balance (Accounts tab → Edit) so the balances match reality.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -367,5 +494,16 @@ fun SettingsScreen(nav: NavController, action: String = "") {
                 snackbar.showSnackbar(if (r.isSuccess) "Backup restored" else "Restore failed: ${r.exceptionOrNull()?.message}")
             }
         }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, hint: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title)
+            if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }

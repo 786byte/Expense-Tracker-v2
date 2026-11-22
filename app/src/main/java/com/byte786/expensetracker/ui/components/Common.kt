@@ -28,7 +28,31 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.SwapHoriz
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.byte786.expensetracker.data.Photos
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.rememberDateRangePickerState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.byte786.expensetracker.ExpenseApp
+import com.byte786.expensetracker.data.AccountBalance
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,7 +94,13 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /** Fast lookups of categories/accounts by id, plus display helpers for a transaction. */
-class Lookup(cats: List<Category>, accs: List<Account>, txns: List<Txn> = emptyList()) {
+class Lookup(
+    cats: List<Category>,
+    accs: List<Account>,
+    txns: List<Txn> = emptyList(),
+    /** Show the subcategory's icon on records instead of the category's. */
+    private val subIcon: Boolean = false,
+) {
     val cat: Map<Long, Category> = cats.associateBy { it.id }
     val acc: Map<Long, Account> = accs.associateBy { it.id }
     /** Parts of bills paid from several accounts, by groupId. */
@@ -106,7 +136,8 @@ class Lookup(cats: List<Category>, accs: List<Account>, txns: List<Txn> = emptyL
 
     fun icon(t: Txn): Pair<String, Long> {
         if (t.type == TxnType.TRANSFER) return "transfer" to 0xFF546E7A
-        val c = t.subcategoryId?.let { cat[it] } ?: t.categoryId?.let { cat[it] }
+        val c = if (subIcon) t.subcategoryId?.let { cat[it] } ?: t.categoryId?.let { cat[it] }
+        else t.categoryId?.let { cat[it] } ?: t.subcategoryId?.let { cat[it] }
         return (c?.icon ?: "category") to (c?.color ?: 0xFF9E9E9E)
     }
 
@@ -115,8 +146,27 @@ class Lookup(cats: List<Category>, accs: List<Account>, txns: List<Txn> = emptyL
         listOf(title(t), accountText(t), t.memo, t.description.orEmpty(), Money.toInput(t.amount)).joinToString(" ")
 }
 
+/** A [Lookup] that follows the "Icon in lists" setting. */
+@Composable
+fun rememberLookup(cats: List<Category>, accs: List<AccountBalance>, txns: List<Txn>): Lookup {
+    val sub by ExpenseApp.instance.repo.prefs.listIconSub.collectAsState()
+    return remember(cats, accs, txns, sub) { Lookup(cats, accs.map { it.account }, txns, sub) }
+}
+
+/** Icon keys starting with this point to a picture in the app's icons folder. */
+const val FILE_ICON = "file:"
+
 @Composable
 fun CategoryIcon(icon: String, color: Long, modifier: Modifier = Modifier, size: Dp = 40.dp) {
+    if (icon.startsWith(FILE_ICON)) {
+        AsyncImage(
+            model = ExpenseApp.instance.repo.iconFile(icon.removePrefix(FILE_ICON)),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier.size(size).clip(CircleShape).background(Color(color)),
+        )
+        return
+    }
     Box(
         modifier.size(size).clip(CircleShape).background(Color(color)),
         contentAlignment = Alignment.Center,
@@ -284,9 +334,17 @@ fun ConfirmDialog(title: String, text: String, confirm: String = "Delete", onDis
     )
 }
 
-/** Color swatches + icon grid, used when editing categories and accounts. */
+/** Color swatches + icon grid (with your own pictures), used when editing categories and accounts. */
 @Composable
 fun IconColorPicker(icon: String, color: Long, onIcon: (String) -> Unit, onColor: (Long) -> Unit) {
+    val repo = ExpenseApp.instance.repo
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var cropSource by remember { mutableStateOf<Bitmap?>(null) }
+    var customIcons by remember { mutableStateOf(repo.customIcons()) }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch { cropSource = Photos.load(ctx, uri, 1600) }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Color", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -299,50 +357,164 @@ fun IconColorPicker(icon: String, color: Long, onIcon: (String) -> Unit, onColor
             }
         }
         Text("Icon", style = MaterialTheme.typography.labelLarge)
-        LazyVerticalGrid(GridCells.Adaptive(48.dp), Modifier.fillMaxWidth().height(200.dp)) {
-            items(AppIcons.all.keys.toList()) { key ->
+        val keys = listOf("+photo") + customIcons.map { FILE_ICON + it } + AppIcons.all.keys
+        LazyVerticalGrid(GridCells.Adaptive(48.dp), Modifier.fillMaxWidth().height(220.dp)) {
+            items(keys) { key ->
                 val selected = key == icon
                 Box(Modifier.padding(4.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        Modifier.size(42.dp).clip(CircleShape)
-                            .background(if (selected) Color(color) else MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { onIcon(key) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            AppIcons.get(key), key,
-                            tint = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp),
+                    when {
+                        key == "+photo" -> Box(
+                            Modifier.size(42.dp).clip(CircleShape).border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                .clickable { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Filled.AddPhotoAlternate, "Use a picture", tint = MaterialTheme.colorScheme.primary) }
+                        key.startsWith(FILE_ICON) -> CategoryIcon(
+                            key, color,
+                            Modifier.then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier)
+                                .clip(CircleShape).clickable { onIcon(key) },
+                            size = 42.dp,
                         )
+                        else -> Box(
+                            Modifier.size(42.dp).clip(CircleShape)
+                                .background(if (selected) Color(color) else MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { onIcon(key) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                AppIcons.get(key), key,
+                                tint = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
                     }
+                }
+            }
+        }
+        Text(
+            "Tip: the first button uses a picture from your gallery (cropped to a circle).",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    cropSource?.let { src ->
+        CropDialog(src, forceSquare = true, title = "Crop the icon", onDismiss = { cropSource = null }) { cropped ->
+            cropSource = null
+            scope.launch {
+                val name = Photos.saveIcon(cropped, repo.iconsDir)
+                if (name != null) {
+                    customIcons = repo.customIcons()
+                    onIcon(FILE_ICON + name)
                 }
             }
         }
     }
 }
 
-/** "‹ Nov 2026 ›  [All time]" — chooses which period a tab shows. */
-@Composable
-fun PeriodBar(
-    month: YearMonth,
-    allTime: Boolean,
-    onMonth: (YearMonth) -> Unit,
-    onAllTime: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var pick by remember { mutableStateOf(false) }
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        IconButton(onClick = { onMonth(month.minusMonths(1)) }) { Icon(Icons.Filled.ChevronLeft, "Previous month") }
-        androidx.compose.material3.FilterChip(
-            selected = !allTime,
-            onClick = { if (allTime) onMonth(month) else pick = true },
-            label = { Text(Dates.shortMonth(month), fontWeight = FontWeight.Bold) },
-        )
-        IconButton(onClick = { onMonth(month.plusMonths(1)) }) { Icon(Icons.Filled.ChevronRight, "Next month") }
-        androidx.compose.material3.FilterChip(
-            selected = allTime, onClick = onAllTime,
-            label = { Text("All time", fontWeight = FontWeight.Bold) },
+/** Which records a history view shows: one month, a custom date range, or all time. */
+class PeriodState(month: YearMonth, mode: Int, from: Long, until: Long) {
+    var month by mutableStateOf(month)
+    /** [MONTH], [RANGE] or [ALL]. */
+    var mode by mutableIntStateOf(mode)
+    /** Custom range [from, to) in epoch millis. */
+    var from by mutableLongStateOf(from)
+    var until by mutableLongStateOf(until)
+
+    val allTime get() = mode == ALL
+
+    /** [start, end) or null for all time. */
+    val range: Pair<Long, Long>?
+        get() = when (mode) {
+            ALL -> null
+            RANGE -> Pair(from, until)
+            else -> Dates.monthRange(month)
+        }
+
+    fun contains(ms: Long): Boolean = range?.let { ms >= it.first && ms < it.second } ?: true
+
+    val label: String
+        get() = when (mode) {
+            ALL -> "All time"
+            RANGE -> Dates.describeRange(from, until)
+            else -> Dates.month(month)
+        }
+
+    companion object {
+        const val MONTH = 0
+        const val RANGE = 1
+        const val ALL = 2
+
+        val Saver = listSaver<PeriodState, Any>(
+            save = { listOf(it.month.toString(), it.mode, it.from, it.until) },
+            restore = { PeriodState(YearMonth.parse(it[0] as String), it[1] as Int, it[2] as Long, it[3] as Long) },
         )
     }
-    if (pick) MonthPickerDialog(month, onDismiss = { pick = false }) { onMonth(it); pick = false }
+}
+
+@Composable
+fun rememberPeriodState(): PeriodState = rememberSaveable(saver = PeriodState.Saver) {
+    PeriodState(YearMonth.now(), PeriodState.MONTH, -1L, -1L)
+}
+
+/** "‹ Nov 2026 ›  [Custom range]  [All time]": chooses which period a view shows. */
+@Composable
+fun PeriodBar(state: PeriodState, modifier: Modifier = Modifier) {
+    var pickMonth by remember { mutableStateOf(false) }
+    var pickRange by remember { mutableStateOf(false) }
+    Row(
+        modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        IconButton(onClick = { state.month = state.month.minusMonths(1); state.mode = PeriodState.MONTH }) {
+            Icon(Icons.Filled.ChevronLeft, "Previous month")
+        }
+        FilterChip(
+            selected = state.mode == PeriodState.MONTH,
+            onClick = { if (state.mode != PeriodState.MONTH) state.mode = PeriodState.MONTH else pickMonth = true },
+            label = { Text(Dates.shortMonth(state.month), fontWeight = FontWeight.Bold) },
+        )
+        IconButton(onClick = { state.month = state.month.plusMonths(1); state.mode = PeriodState.MONTH }) {
+            Icon(Icons.Filled.ChevronRight, "Next month")
+        }
+        FilterChip(
+            selected = state.mode == PeriodState.RANGE,
+            onClick = { pickRange = true },
+            label = {
+                Text(if (state.mode == PeriodState.RANGE) Dates.describeRange(state.from, state.until) else "Custom range", fontWeight = FontWeight.Bold)
+            },
+            leadingIcon = { Icon(Icons.Filled.DateRange, null, Modifier.size(18.dp)) },
+        )
+        Spacer(Modifier.width(6.dp))
+        FilterChip(
+            selected = state.mode == PeriodState.ALL, onClick = { state.mode = PeriodState.ALL },
+            label = { Text("All time", fontWeight = FontWeight.Bold) },
+        )
+        Spacer(Modifier.width(8.dp))
+    }
+    if (pickMonth) MonthPickerDialog(state.month, onDismiss = { pickMonth = false }) {
+        state.month = it; state.mode = PeriodState.MONTH; pickMonth = false
+    }
+    if (pickRange) DateRangeDialog(onDismiss = { pickRange = false }) { f, t ->
+        state.from = f; state.until = t; state.mode = PeriodState.RANGE; pickRange = false
+    }
+}
+
+/** Material date-range picker. [onPick] gets [from, to) in epoch millis (whole days, local time). */
+@Composable
+fun DateRangeDialog(onDismiss: () -> Unit, onPick: (Long, Long) -> Unit) {
+    val state = rememberDateRangePickerState()
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                val s = state.selectedStartDateMillis
+                if (s != null) {
+                    val start = Dates.fromPicker(s)
+                    val end = state.selectedEndDateMillis?.let { Dates.fromPicker(it) } ?: start
+                    onPick(Dates.start(start), Dates.start(end.plusDays(1)))
+                } else onDismiss()
+            }) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    ) {
+        DateRangePicker(state, Modifier.heightIn(max = 520.dp), title = { Text("Select dates", Modifier.padding(start = 24.dp, top = 16.dp)) })
+    }
 }

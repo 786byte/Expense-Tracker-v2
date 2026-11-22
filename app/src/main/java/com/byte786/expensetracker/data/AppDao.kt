@@ -88,6 +88,31 @@ abstract class AppDao {
         putCategory(c.copy(parentId = newParent))
     }
 
+    @Query("UPDATE transactions SET categoryId = :into WHERE categoryId = :from")
+    abstract suspend fun retagCategory(from: Long, into: Long)
+
+    @Query("UPDATE categories SET parentId = :into WHERE parentId = :from")
+    abstract suspend fun reparentSubs(from: Long, into: Long)
+
+    @Query("UPDATE transactions SET categoryId = :intoParent, subcategoryId = :into WHERE subcategoryId = :from")
+    abstract suspend fun retagSubcategory(from: Long, into: Long, intoParent: Long)
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    abstract suspend fun deleteCategoryId(id: Long)
+
+    /** Moves everything in [from] into [into] and deletes [from]. Both are top-level, or both subcategories. */
+    @Transaction
+    open suspend fun mergeCategory(from: Category, into: Category) {
+        if (from.id == into.id) return
+        if (from.parentId == null) {
+            retagCategory(from.id, into.id)
+            reparentSubs(from.id, into.id)
+        } else {
+            retagSubcategory(from.id, into.id, into.parentId ?: return)
+        }
+        deleteCategoryId(from.id)
+    }
+
     // ---- accounts ----
     @Query(
         """

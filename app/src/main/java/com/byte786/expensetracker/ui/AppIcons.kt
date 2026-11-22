@@ -2,6 +2,8 @@ package com.byte786.expensetracker.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.materialIcon
+import androidx.compose.material.icons.materialPath
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /** Icons you can choose for categories and accounts. Stored by key in the database. */
@@ -70,6 +72,31 @@ object AppIcons {
         "security" to Icons.Filled.Security,
         "star" to Icons.Filled.Star,
         "heart" to Icons.Filled.Favorite,
+        "smartphone" to Icons.Filled.Smartphone,
+        "computer" to Icons.Filled.Computer,
+        "headphones" to Icons.Filled.Headphones,
+        "shield" to Icons.Filled.Shield,
+        "selfimprove" to Icons.Filled.SelfImprovement,
+        "mosque" to CustomIcons.Mosque,
+        "perfume" to CustomIcons.Perfume,
+        "grooming" to Icons.Filled.Face,
+        "vape" to Icons.Filled.SmokingRooms,
+        "tax" to Icons.Filled.RequestQuote,
+        "paid" to Icons.Filled.Paid,
+        "teacher" to Icons.Filled.CastForEducation,
+        "historyedu" to Icons.Filled.HistoryEdu,
+        "language" to Icons.Filled.Language,
+        "translate" to Icons.Filled.Translate,
+        "document" to Icons.Filled.Description,
+        "job" to Icons.Filled.BusinessCenter,
+        "subscriptions" to Icons.Filled.Subscriptions,
+        "autorenew" to Icons.Filled.Autorenew,
+        "ai" to Icons.Filled.SmartToy,
+        "theatre" to Icons.Filled.TheaterComedy,
+        "casino" to Icons.Filled.Casino,
+        "ticket" to Icons.Filled.ConfirmationNumber,
+        "sell" to Icons.Filled.Sell,
+        "redeem" to Icons.Filled.Redeem,
         "category" to Icons.Filled.Category,
         "other" to Icons.Filled.MoreHoriz,
     )
@@ -81,4 +108,46 @@ object AppIcons {
         0xFF039BE5, 0xFF00ACC1, 0xFF00897B, 0xFF43A047, 0xFF7CB342, 0xFFC0CA33,
         0xFFFDD835, 0xFFFFB300, 0xFFFB8C00, 0xFFF4511E, 0xFF6D4C41, 0xFF757575, 0xFF546E7A, 0xFF263238,
     )
+}
+
+/** Icons Material doesn't have, drawn on the same 24×24 grid. */
+object CustomIcons {
+    val Perfume: ImageVector by lazy {
+        materialIcon(name = "Custom.Perfume") {
+            materialPath {
+                // cap
+                moveTo(10f, 2f); horizontalLineToRelative(4f); verticalLineToRelative(3f); horizontalLineToRelative(-4f); close()
+                // spray nozzle
+                moveTo(14.5f, 3f); horizontalLineToRelative(3.5f); verticalLineToRelative(1f); horizontalLineToRelative(-3.5f); close()
+                // neck
+                moveTo(11f, 5.5f); horizontalLineToRelative(2f); verticalLineToRelative(1.5f); horizontalLineToRelative(-2f); close()
+                // bottle
+                moveTo(8f, 7.5f); horizontalLineToRelative(8f)
+                curveToRelative(1.1f, 0f, 2f, 0.9f, 2f, 2f); verticalLineToRelative(9.5f)
+                curveToRelative(0f, 1.1f, -0.9f, 2f, -2f, 2f); horizontalLineTo(8f)
+                curveToRelative(-1.1f, 0f, -2f, -0.9f, -2f, -2f); verticalLineTo(9.5f)
+                curveToRelative(0f, -1.1f, 0.9f, -2f, 2f, -2f); close()
+            }
+        }
+    }
+
+    val Mosque: ImageVector by lazy {
+        materialIcon(name = "Custom.Mosque") {
+            materialPath {
+                // minarets
+                moveTo(4f, 3.5f); lineTo(5.2f, 8f); horizontalLineTo(2.8f); close()
+                moveTo(3f, 8.5f); horizontalLineToRelative(2f); verticalLineTo(21f); horizontalLineTo(3f); close()
+                moveTo(20f, 3.5f); lineTo(21.2f, 8f); horizontalLineTo(18.8f); close()
+                moveTo(19f, 8.5f); horizontalLineToRelative(2f); verticalLineTo(21f); horizontalLineToRelative(-2f); close()
+                // spire
+                moveTo(11.4f, 3f); horizontalLineToRelative(1.2f); verticalLineTo(6.5f); horizontalLineToRelative(-1.2f); close()
+                // dome
+                moveTo(6.5f, 12.5f)
+                curveTo(6.5f, 9.5f, 9.5f, 8f, 12f, 6.5f)
+                curveTo(14.5f, 8f, 17.5f, 9.5f, 17.5f, 12.5f); close()
+                // hall
+                moveTo(6.5f, 13f); horizontalLineTo(17.5f); verticalLineTo(21f); horizontalLineTo(6.5f); close()
+            }
+        }
+    }
 }

@@ -76,9 +76,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.byte786.expensetracker.ExpenseApp
 import com.byte786.expensetracker.ui.components.CatFace
-import com.byte786.expensetracker.ui.components.statusMood
-import com.byte786.expensetracker.ui.components.DatePickDialog
-import com.byte786.expensetracker.ui.components.MonthPickerDialog
+import com.byte786.expensetracker.ui.components.rememberStatus
 import com.byte786.expensetracker.ui.screens.AccountsTab
 import com.byte786.expensetracker.ui.screens.AnalysisScreen
 import com.byte786.expensetracker.ui.screens.EditTransactionScreen
@@ -188,9 +186,6 @@ private fun AppDrawer(nav: NavHostController, close: () -> Unit) {
     val repo = ExpenseApp.instance.repo
     val accounts by repo.accounts.collectAsState()
     val currency = LocalCurrency.current
-    var query by remember { mutableStateOf("") }
-    var pickDate by remember { mutableStateOf(false) }
-    var pickMonth by remember { mutableStateOf(false) }
     var resetStep by remember { mutableIntStateOf(0) } // 0 closed, 1 choose, 2 confirm
     var resetAll by remember { mutableStateOf(false) }
     val total = accounts.sumOf { it.balance }
@@ -204,16 +199,8 @@ private fun AppDrawer(nav: NavHostController, close: () -> Unit) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
             Row(Modifier.padding(start = 20.dp, top = 20.dp, bottom = 12.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 val txns by repo.txns.collectAsState()
-                val (cf, ct) = Dates.monthRange(YearMonth.now())
-                val nowTx = txns.filter { it.date >= cf && it.date < ct }
-                CatFace(
-                    statusMood(
-                        total,
-                        nowTx.filter { it.type == com.byte786.expensetracker.data.TxnType.INCOME }.sumOf { it.amount },
-                        nowTx.filter { it.type == com.byte786.expensetracker.data.TxnType.EXPENSE }.sumOf { it.amount },
-                    ),
-                    Modifier.size(48.dp),
-                )
+                val status = rememberStatus(txns, accounts)
+                CatFace(status.mood, Modifier.size(48.dp), animate = false)
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("Expense Tracker", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
@@ -224,28 +211,6 @@ private fun AppDrawer(nav: NavHostController, close: () -> Unit) {
                     )
                 }
             }
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text("Search memo, category, amount…") },
-                leadingIcon = { Icon(Icons.Filled.Search, null) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { go(Routes.search(q = query)) }),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            )
-            FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val today = LocalDate.now()
-                val month = YearMonth.now()
-                AssistChip(onClick = { val (f, t) = Dates.dayRange(today); go(Routes.search(from = f, to = t)) }, label = { Text("Today") })
-                AssistChip(onClick = { val (f, t) = Dates.monthRange(month); go(Routes.search(from = f, to = t)) }, label = { Text("This month") })
-                AssistChip(onClick = { val (f, t) = Dates.monthRange(month.minusMonths(1)); go(Routes.search(from = f, to = t)) }, label = { Text("Last month") })
-                AssistChip(onClick = { val (f, t) = Dates.yearRange(today.year); go(Routes.search(from = f, to = t)) }, label = { Text("This year") })
-                AssistChip(onClick = { pickDate = true }, label = { Text("Pick a date") }, leadingIcon = { Icon(Icons.Filled.Event, null) })
-                AssistChip(onClick = { pickMonth = true }, label = { Text("Pick a month") }, leadingIcon = { Icon(Icons.Filled.CalendarMonth, null) })
-                AssistChip(onClick = { go(Routes.search()) }, label = { Text("By category…") }, leadingIcon = { Icon(Icons.Filled.Category, null) })
-            }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
             DrawerItem("Backup & settings", "Google Drive backup, theme, currency", Icons.Filled.CloudUpload) { go(Routes.settings()) }
@@ -255,21 +220,6 @@ private fun AppDrawer(nav: NavHostController, close: () -> Unit) {
             DrawerItem("Delete & reset", "Erase records, or everything", Icons.Filled.DeleteForever, danger = true) {
                 resetAll = false; resetStep = 1
             }
-        }
-    }
-
-    if (pickDate) {
-        DatePickDialog(LocalDate.now(), onDismiss = { pickDate = false }) { d ->
-            pickDate = false
-            val (f, t) = Dates.dayRange(d)
-            go(Routes.search(from = f, to = t))
-        }
-    }
-    if (pickMonth) {
-        MonthPickerDialog(YearMonth.now(), onDismiss = { pickMonth = false }) { m ->
-            pickMonth = false
-            val (f, t) = Dates.monthRange(m)
-            go(Routes.search(from = f, to = t))
         }
     }
 

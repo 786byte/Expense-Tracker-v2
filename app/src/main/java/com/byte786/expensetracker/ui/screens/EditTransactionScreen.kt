@@ -98,6 +98,7 @@ import com.byte786.expensetracker.ui.components.CalculatorSheet
 import com.byte786.expensetracker.ui.components.CategoryIcon
 import com.byte786.expensetracker.ui.components.CategorySheet
 import com.byte786.expensetracker.ui.components.ConfirmDialog
+import com.byte786.expensetracker.ui.components.CropDialog
 import com.byte786.expensetracker.ui.components.DatePickDialog
 import com.byte786.expensetracker.ui.components.SubcategorySheet
 import com.byte786.expensetracker.ui.components.VoiceInput
@@ -200,25 +201,21 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
             applyDraft(VoiceInput.parse(heard, cats, accs))
         }
     }
+    // A picked or shot photo is shown in the crop screen first, then saved.
+    var cropSource by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
-            val name = Photos.import(ctx, uri, repo.photosDir)
-            if (name == null) snackbar.showSnackbar("Couldn't read that image") else {
-                if (photo != null && photo != originalPhoto) repo.photoFile(photo!!).delete()
-                photo = name
-            }
+            val bmp = Photos.load(ctx, uri)
+            if (bmp == null) snackbar.showSnackbar("Couldn't read that image") else cropSource = bmp
         }
     }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val tmp = pendingCamera?.let { File(ctx.cacheDir, "camera/$it") }
         pendingCamera = null
         if (ok && tmp != null && tmp.exists()) scope.launch {
-            val name = Photos.import(ctx, Uri.fromFile(tmp), repo.photosDir)
+            val bmp = Photos.load(ctx, Uri.fromFile(tmp))
             tmp.delete()
-            if (name != null) {
-                if (photo != null && photo != originalPhoto) repo.photoFile(photo!!).delete()
-                photo = name
-            }
+            if (bmp == null) snackbar.showSnackbar("Couldn't read the photo") else cropSource = bmp
         }
     }
     fun openCamera() {
@@ -444,6 +441,18 @@ fun EditTransactionScreen(nav: NavController, id: Long, initialType: Int) {
         }
     }
 
+    cropSource?.let { src ->
+        CropDialog(src, forceSquare = false, title = "Crop the photo", onDismiss = { cropSource = null }) { cropped ->
+            cropSource = null
+            scope.launch {
+                val name = Photos.savePhoto(cropped, repo.photosDir)
+                if (name == null) snackbar.showSnackbar("Couldn't save the photo") else {
+                    if (photo != null && photo != originalPhoto) repo.photoFile(photo!!).delete()
+                    photo = name
+                }
+            }
+        }
+    }
     if (calcFor != CALC_NONE) {
         val forTotal = calcFor == CALC_TOTAL
         val idx = calcFor

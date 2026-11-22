@@ -7,15 +7,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material3.PlainTooltip
-import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipDefaults
-import androidx.compose.material3.rememberTooltipState
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import com.byte786.expensetracker.ui.components.VoiceInput
-import com.byte786.expensetracker.ui.components.statusMood
-import kotlinx.coroutines.launch
+import com.byte786.expensetracker.ui.components.AdviceSheet
+import com.byte786.expensetracker.ui.components.RecordSheet
+import com.byte786.expensetracker.ui.components.moodName
+import com.byte786.expensetracker.ui.components.rememberLookup
+import com.byte786.expensetracker.ui.components.rememberStatus
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -77,9 +75,8 @@ import com.byte786.expensetracker.ui.Dates
 import com.byte786.expensetracker.ui.Money
 import com.byte786.expensetracker.ui.Routes
 import com.byte786.expensetracker.ui.components.CatFace
-import com.byte786.expensetracker.ui.components.CatMood
+import com.byte786.expensetracker.data.CatMood
 import com.byte786.expensetracker.ui.components.EmptyState
-import com.byte786.expensetracker.ui.components.Lookup
 import com.byte786.expensetracker.ui.components.MonthPickerDialog
 import com.byte786.expensetracker.ui.components.RunningCat
 import com.byte786.expensetracker.ui.components.txnDayGroups
@@ -93,7 +90,9 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
     val txns by repo.txns.collectAsState()
     val cats by repo.categories.collectAsState()
     val accs by repo.accounts.collectAsState()
-    val lk = remember(cats, accs, txns) { Lookup(cats, accs.map { it.account }, txns) }
+    val lk = rememberLookup(cats, accs, txns)
+    val order by repo.prefs.homeOrder.collectAsState()
+    val hidden by repo.prefs.homeHidden.collectAsState()
     val currency = LocalCurrency.current
 
     var month by rememberSaveable { mutableStateOf(YearMonth.now()) }
@@ -109,19 +108,10 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
     BackHandler(enabled = fabOpen) { fabOpen = false }
 
     // Status cat mood: always about the current month.
-    val (cf, ct) = Dates.monthRange(YearMonth.now())
-    val nowTx = txns.filter { it.date >= cf && it.date < ct }
-    val nowInc = nowTx.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
-    val nowExp = nowTx.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
-    val mood = statusMood(total, nowInc, nowExp)
-    val moodText = when (mood) {
-        CatMood.CRYING -> "In debt 😿 Total balance is ${Money.format(total, currency)}"
-        CatMood.ANGRY -> "Angry 😾 This month you spent ${Money.format(nowExp - nowInc, currency)} more than you earned"
-        CatMood.HAPPY -> "In plus 😺 This month you saved ${Money.format(nowInc - nowExp, currency)}"
-        else -> "Neutral 🐱 This month is about even"
-    }
-    val moodTip = rememberTooltipState(isPersistent = true)
-    val scope = rememberCoroutineScope()
+    val status = rememberStatus(txns, accs)
+    val mood = status.mood
+    var showAdvice by remember { mutableStateOf(false) }
+    var openId by remember { mutableStateOf<Long?>(null) }
     val ctx = LocalContext.current
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val heard = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
@@ -154,8 +144,12 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
             },
         ) { pad ->
             LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(bottom = 96.dp)) {
+                order.forEach { block ->
                 // Status cat | running cat | total balance
-                item(key = "hero") {
+                val showCat = "statusCat" !in hidden
+                val showRunner = "runningCat" !in hidden
+                val showBalance = "balance" !in hidden
+                if (block == "hero" && (showCat || showRunner || showBalance)) item(key = "hero") {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp)
                             .clip(RoundedCornerShape(20.dp))
@@ -164,19 +158,13 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
                             .padding(horizontal = 10.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Status cat: picture only; tap it to see the mood.
-                        TooltipBox(
-                            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                            tooltip = { PlainTooltip { Text(moodText) } },
-                            state = moodTip,
-                        ) {
-                            Box(
-                                Modifier.size(72.dp).clip(CircleShape).clickable(onClickLabel = "Show mood") { scope.launch { moodTip.show() } },
-                                contentAlignment = Alignment.Center,
-                            ) { CatFace(mood, Modifier.size(60.dp), description = moodText) }
-                        }
-                        RunningCat(Modifier.weight(1f).height(72.dp))
-                        Column(Modifier.width(104.dp), horizontalAlignment = Alignment.End) {
+                        // Status cat: tap it for its mood and some advice.
+                        if (showCat) Box(
+                            Modifier.size(72.dp).clip(CircleShape).clickable(onClickLabel = "Show mood and advice") { showAdvice = true },
+                            contentAlignment = Alignment.Center,
+                        ) { CatFace(mood, Modifier.size(60.dp), description = moodName(mood)) }
+                        if (showRunner) RunningCat(Modifier.weight(1f).height(72.dp)) else Spacer(Modifier.weight(1f).height(72.dp))
+                        if (showBalance) Column(Modifier.width(120.dp), horizontalAlignment = Alignment.End) {
                             Text("Total balance", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
                                 Money.format(total, currency), style = MaterialTheme.typography.titleMedium,
@@ -188,13 +176,13 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
                 }
 
                 // Month totals (left) and month switcher (right)
-                item(key = "month") {
+                if (block == "totals") item(key = "month") {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            TotalLine("Income", "+" + Money.format(income, currency), MoneyColors.income) {
+                            if ("totals" !in hidden) TotalLine("Income", "+" + Money.format(income, currency), MoneyColors.income) {
                                 val (f, t) = range; nav.navigate(Routes.search(from = f, to = t, type = TxnType.INCOME))
                             }
-                            TotalLine("Expense", "-" + Money.format(expense, currency), MoneyColors.expense) {
+                            if ("totals" !in hidden) TotalLine("Expense", "-" + Money.format(expense, currency), MoneyColors.expense) {
                                 val (f, t) = range; nav.navigate(Routes.search(from = f, to = t, type = TxnType.EXPENSE))
                             }
                         }
@@ -213,8 +201,11 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
                     }
                 }
 
-                if (monthTx.isEmpty()) item(key = "empty") { EmptyState("Nothing recorded in ${Dates.month(month)}.\nTap + to add one.") }
-                txnDayGroups(lk.merged(monthTx), lk) { nav.navigate(Routes.edit(it.id)) }
+                if (block == "records") {
+                    if (monthTx.isEmpty()) item(key = "empty") { EmptyState("Nothing recorded in ${Dates.month(month)}.\nTap + to add one.") }
+                    txnDayGroups(lk.merged(monthTx), lk) { openId = it.id }
+                }
+                }
             }
         }
 
@@ -250,6 +241,8 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
     }
 
     if (pickMonth) MonthPickerDialog(month, onDismiss = { pickMonth = false }) { month = it; pickMonth = false }
+    if (showAdvice) AdviceSheet(status) { showAdvice = false }
+    openId?.let { RecordSheet(it, nav) { openId = null } }
 }
 
 @Composable

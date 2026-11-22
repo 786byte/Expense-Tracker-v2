@@ -23,6 +23,11 @@ class Repository(private val ctx: Context) {
     val photosDir: File get() = File(ctx.filesDir, "photos").apply { mkdirs() }
     fun photoFile(name: String) = File(photosDir, name)
 
+    /** Custom icons (pictures) for categories and accounts; used as icon "file:<name>". */
+    val iconsDir: File get() = File(ctx.filesDir, "icons").apply { mkdirs() }
+    fun iconFile(name: String) = File(iconsDir, name)
+    fun customIcons(): List<String> = iconsDir.listFiles()?.sortedBy { it.lastModified() }?.map { it.name }.orEmpty()
+
     init {
         scope.launch {
             if (!prefs.seeded) {
@@ -30,6 +35,7 @@ class Repository(private val ctx: Context) {
                 prefs.seeded = true
             }
             cleanupOrphanPhotos()
+            cleanupOrphanIcons()
         }
     }
 
@@ -37,6 +43,27 @@ class Repository(private val ctx: Context) {
     private suspend fun cleanupOrphanPhotos() {
         val used = dao.allTxns().mapNotNull { it.photo }.toSet()
         photosDir.listFiles()?.forEach { if (it.name !in used) it.delete() }
+    }
+
+    /** Removes custom icons no category or account uses any more. */
+    private suspend fun cleanupOrphanIcons() {
+        val used = (dao.allCategories().map { it.icon } + dao.allAccounts().map { it.icon })
+            .filter { it.startsWith("file:") }.map { it.removePrefix("file:") }.toSet()
+        iconsDir.listFiles()?.forEach { if (it.name !in used) it.delete() }
+    }
+
+    /** Merges category [from] into [into] (same level): records and subcategories move, [from] is deleted. */
+    suspend fun mergeCategory(from: Category, into: Category) { dao.mergeCategory(from, into); changed() }
+
+    /** Gives every category whose icon wasn't set from a picture a fresh icon guessed from its name. */
+    suspend fun refreshCategoryIcons(): Int {
+        var n = 0
+        dao.allCategories().filter { !it.icon.startsWith("file:") }.forEach { c ->
+            val guess = CsvImport.guessIcon(c.name, c.icon)
+            if (guess != c.icon) { dao.putCategory(c.copy(icon = guess)); n++ }
+        }
+        if (n > 0) changed()
+        return n
     }
 
     /** Runs a database write that must finish even if the screen that started it closes. */

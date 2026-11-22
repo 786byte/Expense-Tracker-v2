@@ -2,7 +2,6 @@ package com.byte786.expensetracker.ui
 
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -13,18 +12,46 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
 
+/** How amounts are written. Set from Settings; see [Money.style]. */
+data class MoneyStyle(
+    val symbolAfter: Boolean = false,
+    val decimals: Boolean = true,
+    /** 1,00,000 instead of 100,000. */
+    val indianGrouping: Boolean = false,
+)
+
 object Money {
-    private val nf = NumberFormat.getNumberInstance(Locale.US).apply {
-        minimumFractionDigits = 0
-        maximumFractionDigits = 2
-        isGroupingUsed = true
-    }
+    @Volatile var style = MoneyStyle()
 
     /** [minor] is in paisa/cents. */
-    fun format(minor: Long, symbol: String, sign: String = ""): String {
-        val value = nf.format(BigDecimal.valueOf(abs(minor), 2))
+    fun format(minor: Long, symbol: String, sign: String = "", style: MoneyStyle = this.style): String {
+        val value = number(abs(minor), style)
         val s = if (sign.isEmpty() && minor < 0) "-" else sign
-        return "$s$symbol$value"
+        return if (style.symbolAfter) "$s$value${if (symbol.isBlank()) "" else " " + symbol.trim()}" else "$s$symbol$value"
+    }
+
+    /** Positive [minor] as text, e.g. 1234567 -> "12,345.67" (or "12,346" without decimals). */
+    fun number(minor: Long, style: MoneyStyle = this.style): String {
+        val bd = BigDecimal.valueOf(minor, 2)
+        val whole: Long
+        var frac = ""
+        if (style.decimals) {
+            whole = minor / 100
+            val cents = minor % 100
+            if (cents != 0L) frac = "." + (if (cents % 10 == 0L) (cents / 10).toString() else cents.toString().padStart(2, '0'))
+        } else {
+            whole = bd.setScale(0, RoundingMode.HALF_UP).toLong()
+        }
+        return group(whole.toString(), style.indianGrouping) + frac
+    }
+
+    private fun group(digits: String, indian: Boolean): String {
+        if (digits.length <= 3) return digits
+        val last3 = digits.takeLast(3)
+        val rest = digits.dropLast(3)
+        val size = if (indian) 2 else 3
+        val parts = rest.reversed().chunked(size).map { it.reversed() }.reversed()
+        return parts.joinToString(",") + "," + last3
     }
 
     fun parse(text: String): Long? = text.trim().replace(",", "").toBigDecimalOrNull()
@@ -71,7 +98,7 @@ object Dates {
     fun toPicker(d: LocalDate): Long = d.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 
     fun describeRange(from: Long, to: Long): String {
-        if (from < 0 || to < 0) return "Any time"
+        if (from < 0 || to < 0) return "All time"
         val a = date(from)
         val bExcl = date(to)
         val b = bExcl.minusDays(1)

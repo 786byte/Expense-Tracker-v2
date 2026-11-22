@@ -22,21 +22,33 @@ object CsvImport {
         0xFFFFB300, 0xFFF4511E, 0xFF6D4C41, 0xFFD81B60, 0xFF5E35B1, 0xFF00ACC1,
     )
 
-    /** Picks a sensible icon from words in a category or account name. */
-    private fun guessIcon(name: String, fallback: String): String {
+    /** Picks a sensible icon from words in a category or account name (first match wins). */
+    fun guessIcon(name: String, fallback: String): String {
         val n = name.lowercase()
         val rules = listOf(
-            "fuel" to "fuel", "petrol" to "fuel", "octane" to "fuel", "bike" to "bike", "car" to "car",
-            "pc" to "laptop", "computer" to "laptop", "mobile" to "phone", "phone" to "phone", "bkash" to "phone",
-            "subscription" to "card", "game" to "games", "theatre" to "movie", "movie" to "movie", "cinema" to "movie",
-            "salary" to "salary", "tution" to "education", "tuition" to "education", "tax" to "bills", "bill" to "bills",
-            "gym" to "fitness", "barber" to "haircut", "hair" to "haircut", "groom" to "beauty", "education" to "education",
-            "book" to "book", "sale" to "cart", "sold" to "cart", "lottery" to "star", "grant" to "gift", "gift" to "gift",
-            "blessing" to "heart", "mom" to "heart", "food" to "food", "lara" to "food", "restaurant" to "food",
-            "job" to "salary", "loan" to "bank", "bank" to "bank", "cash" to "cash", "vape" to "cafe", "rent" to "rent",
+            "pulsar" to "bike", "motorcycle" to "bike", "bike" to "bike", "mobil" to "oil",
+            "fuel" to "fuel", "petrol" to "fuel", "octane" to "fuel", "car" to "car",
+            "aura" to "selfimprove", "maxing" to "selfimprove", "self" to "selfimprove",
+            "deen" to "mosque", "mosque" to "mosque", "masjid" to "mosque", "zakat" to "charity", "sadaqah" to "charity",
+            "fragrance" to "perfume", "attar" to "perfume", "perfume" to "perfume",
+            "tax" to "tax", "blessing" to "charity", "mom" to "charity",
+            "tution" to "teacher", "tuition" to "teacher", "alliance" to "translate", "french" to "translate",
+            "language" to "translate", "education" to "education", "course" to "education",
+            "application" to "document", "job" to "job",
+            "claude" to "ai", "chatgpt" to "ai", "subscription" to "subscriptions",
+            "pc" to "computer", "computer" to "computer", "laptop" to "laptop",
+            "headphone" to "headphones", "earphone" to "headphones",
+            "smartphone" to "smartphone", "mobile" to "smartphone", "phone" to "smartphone", "bkash" to "phone", "nagad" to "phone",
+            "salary" to "salary", "groom" to "grooming", "barber" to "haircut", "hair" to "haircut",
+            "vape" to "vape", "theatre" to "theatre", "theater" to "theatre", "drama" to "theatre",
+            "lottery" to "casino", "ticket" to "ticket", "sale" to "sell", "sold" to "sell",
+            "grant" to "redeem", "scholarship" to "redeem", "gym" to "fitness", "game" to "games",
+            "movie" to "movie", "cinema" to "movie", "bill" to "bills", "book" to "book",
+            "gift" to "gift", "food" to "food", "lara" to "food", "restaurant" to "food",
+            "loan" to "bank", "bank" to "bank", "cash" to "cash", "rent" to "rent",
             "medic" to "medicine", "doctor" to "health", "travel" to "travel", "shop" to "shopping",
         )
-        return rules.firstOrNull { (k, _) -> n.contains(k) }?.second ?: fallback
+        return rules.firstOrNull { (k, _) -> Regex("\\b" + Regex.escape(k)).containsMatchIn(n) }?.second ?: fallback
     }
 
     suspend fun import(ctx: Context, uri: Uri): Summary = withContext(Dispatchers.IO) {

@@ -11,17 +11,19 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
-/** Copies receipt photos into private storage, shrunk so backups stay small. */
+/** Copies receipt photos and custom icons into private storage, shrunk so backups stay small. */
 object Photos {
     private const val MAX_SIDE = 1600
+    private const val ICON_SIDE = 256
 
-    suspend fun import(ctx: Context, source: Uri, photosDir: File): String? = withContext(Dispatchers.IO) {
+    /** Reads an image, upright (EXIF rotation applied) and at most [maxSide] px on its longest side. */
+    suspend fun load(ctx: Context, source: Uri, maxSide: Int = 2048): Bitmap? = withContext(Dispatchers.IO) {
         runCatching {
             val resolver = ctx.contentResolver
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             resolver.openInputStream(source)?.use { BitmapFactory.decodeStream(it, null, bounds) }
             var sample = 1
-            while (bounds.outWidth / sample > MAX_SIDE * 2 || bounds.outHeight / sample > MAX_SIDE * 2) sample *= 2
+            while (bounds.outWidth / sample > maxSide * 2 || bounds.outHeight / sample > maxSide * 2) sample *= 2
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             var bmp = resolver.openInputStream(source)?.use { BitmapFactory.decodeStream(it, null, opts) }
                 ?: return@runCatching null
@@ -35,7 +37,7 @@ object Photos {
                 }
             } ?: 0f
 
-            val scale = MAX_SIDE.toFloat() / maxOf(bmp.width, bmp.height)
+            val scale = maxSide.toFloat() / maxOf(bmp.width, bmp.height)
             if (scale < 1f || rotation != 0f) {
                 val m = Matrix().apply {
                     if (scale < 1f) postScale(scale, scale)
@@ -43,8 +45,27 @@ object Photos {
                 }
                 bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
             }
-            val name = "${UUID.randomUUID()}.jpg"
-            File(photosDir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 82, it) }
+            bmp
+        }.getOrNull()
+    }
+
+    /** Saves a (cropped) receipt photo as JPEG; returns its file name. */
+    suspend fun savePhoto(bmp: Bitmap, dir: File): String? = save(bmp, dir, MAX_SIDE, png = false)
+
+    /** Saves a square custom icon as PNG; returns its file name. */
+    suspend fun saveIcon(bmp: Bitmap, dir: File): String? = save(bmp, dir, ICON_SIDE, png = true)
+
+    private suspend fun save(src: Bitmap, dir: File, maxSide: Int, png: Boolean): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val scale = maxSide.toFloat() / maxOf(src.width, src.height)
+            val bmp = if (scale < 1f) {
+                Bitmap.createScaledBitmap(src, (src.width * scale).toInt().coerceAtLeast(1), (src.height * scale).toInt().coerceAtLeast(1), true)
+            } else src
+            dir.mkdirs()
+            val name = "${UUID.randomUUID()}.${if (png) "png" else "jpg"}"
+            File(dir, name).outputStream().use {
+                bmp.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, if (png) 100 else 82, it)
+            }
             name
         }.getOrNull()
     }

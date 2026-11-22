@@ -64,6 +64,9 @@ import com.byte786.expensetracker.ui.Money
 import com.byte786.expensetracker.ui.Routes
 import com.byte786.expensetracker.ui.components.CategoryIcon
 import com.byte786.expensetracker.ui.components.DatePickDialog
+import com.byte786.expensetracker.ui.components.DateRangeDialog
+import com.byte786.expensetracker.ui.components.RecordSheet
+import com.byte786.expensetracker.ui.components.rememberLookup
 import com.byte786.expensetracker.ui.components.EmptyState
 import com.byte786.expensetracker.ui.components.Lookup
 import com.byte786.expensetracker.ui.components.MonthPickerDialog
@@ -86,7 +89,8 @@ fun SearchScreen(
     val txns by repo.txns.collectAsState()
     val cats by repo.categories.collectAsState()
     val accs by repo.accounts.collectAsState()
-    val lk = remember(cats, accs, txns) { Lookup(cats, accs.map { it.account }, txns) }
+    val lk = rememberLookup(cats, accs, txns)
+    var openId by remember { mutableStateOf<Long?>(null) }
     val currency = LocalCurrency.current
 
     var query by rememberSaveable { mutableStateOf(initialQuery) }
@@ -154,7 +158,7 @@ fun SearchScreen(
                             )
                             DropdownMenu(expanded = dateMenu, onDismissRequest = { dateMenu = false }) {
                                 fun set(r: Pair<Long, Long>?) { from = r?.first ?: -1; to = r?.second ?: -1; dateMenu = false }
-                                DropdownMenuItem(text = { Text("Any time") }, onClick = { set(null) })
+                                DropdownMenuItem(text = { Text("All time") }, onClick = { set(null) })
                                 DropdownMenuItem(text = { Text("Today") }, onClick = { set(Dates.dayRange(LocalDate.now())) })
                                 DropdownMenuItem(text = { Text("This month") }, onClick = { set(Dates.monthRange(YearMonth.now())) })
                                 DropdownMenuItem(text = { Text("Last month") }, onClick = { set(Dates.monthRange(YearMonth.now().minusMonths(1))) })
@@ -193,7 +197,7 @@ fun SearchScreen(
                 }
             }
             if (results.isEmpty()) item(key = "empty") { EmptyState("No matching records") }
-            txnDayGroups(results, lk) { nav.navigate(Routes.edit(it.id)) }
+            txnDayGroups(results, lk) { openId = it.id }
         }
     }
 
@@ -208,25 +212,9 @@ fun SearchScreen(
         }
     }
     if (pickRange) {
-        val state = rememberDateRangePickerState()
-        DatePickerDialog(
-            onDismissRequest = { pickRange = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val s = state.selectedStartDateMillis
-                    if (s != null) {
-                        val start = Dates.fromPicker(s)
-                        val end = state.selectedEndDateMillis?.let { Dates.fromPicker(it) } ?: start
-                        from = Dates.start(start); to = Dates.start(end.plusDays(1))
-                    }
-                    pickRange = false
-                }) { Text("OK") }
-            },
-            dismissButton = { TextButton(onClick = { pickRange = false }) { Text("Cancel") } },
-        ) {
-            DateRangePicker(state, Modifier.heightIn(max = 520.dp), title = { Text("Select dates", Modifier.padding(start = 24.dp, top = 16.dp)) })
-        }
+        DateRangeDialog(onDismiss = { pickRange = false }) { f, t -> from = f; to = t; pickRange = false }
     }
+    openId?.let { RecordSheet(it, nav) { openId = null } }
     if (pickCat) {
         CategoryPickerDialog(cats, onDismiss = { pickCat = false }) { catId = it; pickCat = false }
     }

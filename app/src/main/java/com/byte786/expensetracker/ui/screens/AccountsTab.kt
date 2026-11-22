@@ -20,7 +20,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.byte786.expensetracker.ui.components.RecordSheet
+import com.byte786.expensetracker.ui.components.rememberLookup
+import com.byte786.expensetracker.ui.components.rememberPeriodState
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -81,10 +92,19 @@ import kotlinx.coroutines.launch
 import java.time.YearMonth
 
 private const val NO_SUB = -1L
+private const val ACCOUNTS = 0
+private const val CATEGORIES = 1
+private const val SUBCATEGORIES = 2
+private val MODE_NAMES = listOf("Accounts", "Categories", "Subcategories")
+private val MODE_ICONS = listOf(Icons.Filled.AccountBalanceWallet, Icons.Filled.Category, Icons.AutoMirrored.Filled.List)
+
+private fun records(n: Int) = if (n == 1) "1 record" else "$n records"
 
 /**
- * Accounts tab. Categories: list → one category (its subcategories, minimal) → one subcategory (all records).
- * Accounts: list → one account's records. Tapping never edits; editing happens only after pressing Edit.
+ * Accounts tab. Tap the title to switch between Accounts (default), Categories and Subcategories.
+ * Categories: list → one category (its subcategories) → one subcategory (all records).
+ * Subcategories: flat list → one subcategory's records. Accounts: list → one account's records.
+ * Tapping never edits; editing happens only after pressing Edit, and records open a summary first.
  */
 @Composable
 fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
@@ -92,15 +112,16 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
     val txns by repo.txns.collectAsState()
     val cats by repo.categories.collectAsState()
     val accs by repo.accounts.collectAsState()
-    val lk = remember(cats, accs, txns) { Lookup(cats, accs.map { it.account }, txns) }
+    val lk = rememberLookup(cats, accs, txns)
     val currency = LocalCurrency.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
-    var seg by rememberSaveable { mutableIntStateOf(0) } // 0 categories, 1 accounts
+    var mode by rememberSaveable { mutableIntStateOf(ACCOUNTS) }
+    var modeMenu by remember { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf(false) }
-    var month by rememberSaveable { mutableStateOf(YearMonth.now()) }
-    var allTime by rememberSaveable { mutableStateOf(false) }
+    val period = rememberPeriodState()
+    var openId by remember { mutableStateOf<Long?>(null) }
     var view by rememberSaveable { mutableStateOf("list") } // list | cat | sub | acc
     var catId by rememberSaveable { mutableLongStateOf(0L) }
     var subId by rememberSaveable { mutableLongStateOf(NO_SUB) }
@@ -110,12 +131,14 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
     var editAcc by remember { mutableStateOf<Account?>(null) }
     var deleteCat by remember { mutableStateOf<Pair<Category, Int>?>(null) }
 
-    val range = Dates.monthRange(month)
-    val inPeriod: (Txn) -> Boolean = { allTime || (it.date >= range.first && it.date < range.second) }
-    val periodName = if (allTime) "All time" else Dates.month(month)
+    val inPeriod: (Txn) -> Boolean = { period.contains(it.date) }
+    val periodName = period.label
 
     fun back() {
-        view = when (view) { "sub" -> "cat"; else -> "list" }
+        view = when {
+            view == "sub" && mode == CATEGORIES -> "cat"
+            else -> "list"
+        }
     }
     BackHandler(enabled = view != "list") { back() }
 
@@ -123,7 +146,28 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("Accounts", fontWeight = FontWeight.Black) },
+                title = {
+                    // Tap the title to switch what this tab lists.
+                    Box {
+                        Row(
+                            Modifier.clip(RoundedCornerShape(12.dp)).clickable { modeMenu = true }.padding(horizontal = 6.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(MODE_NAMES[mode], fontWeight = FontWeight.Black)
+                            Icon(Icons.Filled.ArrowDropDown, "Switch view")
+                        }
+                        DropdownMenu(expanded = modeMenu, onDismissRequest = { modeMenu = false }) {
+                            MODE_NAMES.forEachIndexed { i, name ->
+                                DropdownMenuItem(
+                                    text = { Text(name, fontWeight = if (i == mode) FontWeight.Black else FontWeight.Normal) },
+                                    leadingIcon = { Icon(MODE_ICONS[i], null) },
+                                    trailingIcon = { if (i == mode) Icon(Icons.Filled.Check, null) },
+                                    onClick = { mode = i; view = "list"; modeMenu = false },
+                                )
+                            }
+                        }
+                    }
+                },
                 navigationIcon = { IconButton(onClick = openDrawer) { Icon(Icons.Filled.Menu, "Menu") } },
                 actions = {
                     if (editing) Button(onClick = { editing = false }) { Text("Done") }
@@ -140,18 +184,12 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item(key = "controls") {
-                Column {
-                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-                        SegmentedButton(seg == 0, { seg = 0; view = "list" }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Categories") }
-                        SegmentedButton(seg == 1, { seg = 1; view = "list" }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("Accounts") }
-                    }
-                    PeriodBar(month, allTime, onMonth = { month = it; allTime = false }, onAllTime = { allTime = true })
-                }
+                PeriodBar(period)
             }
 
             when {
                 // ---------- All categories ----------
-                seg == 0 && view == "list" -> {
+                mode == CATEGORIES && view == "list" -> {
                     listOf(TxnType.EXPENSE to "Expense categories", TxnType.INCOME to "Income categories").forEach { (type, title) ->
                         item(key = "cats-$type") { Column {
                             Label(title)
@@ -162,7 +200,8 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                     val subs = cats.filter { it.parentId == c.id }
                                     ItemRow(
                                         icon = c.icon, color = c.color, title = c.name,
-                                        subtitle = (if (subs.isEmpty()) "No subcategories" else subs.joinToString { it.name }) + " · ${tx.size} records",
+                                        subtitle = if (subs.isEmpty()) "No subcategories" else subs.joinToString { it.name },
+                                        count = records(lk.merged(tx).size),
                                         amount = Money.format(tx.filter { it.type == type }.sumOf { it.amount }, currency),
                                         amountColor = if (type == TxnType.EXPENSE) MoneyColors.expense else MoneyColors.income,
                                         editing = editing,
@@ -173,6 +212,34 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                 if (parents.isEmpty() && !editing) EmptyState("No categories yet. Press Edit to add one.")
                                 if (editing) AddRow("Add category") {
                                     editCat = Category(name = "", type = type, icon = "category", color = 0xFFB85A12, sortOrder = parents.size)
+                                }
+                            }
+                        } }
+                    }
+                }
+
+                // ---------- Every subcategory in one flat list ----------
+                mode == SUBCATEGORIES && view == "list" -> {
+                    listOf(TxnType.EXPENSE to "Expense subcategories", TxnType.INCOME to "Income subcategories").forEach { (type, title) ->
+                        item(key = "subs-$type") { Column {
+                            Label(title)
+                            Card {
+                                val parents = cats.filter { it.parentId == null && it.type == type }
+                                val subs = parents.flatMap { p -> cats.filter { it.parentId == p.id } }
+                                if (subs.isEmpty()) EmptyState("No subcategories yet.")
+                                subs.forEach { sc ->
+                                    val parent = lk.cat[sc.parentId ?: 0L]
+                                    val tx = txns.filter { inPeriod(it) && it.subcategoryId == sc.id }
+                                    ItemRow(
+                                        icon = sc.icon, color = sc.color, title = sc.name,
+                                        subtitle = "in ${parent?.name ?: "?"}",
+                                        count = records(lk.merged(tx).size),
+                                        amount = Money.format(tx.filter { it.type == type }.sumOf { it.amount }, currency),
+                                        amountColor = if (type == TxnType.EXPENSE) MoneyColors.expense else MoneyColors.income,
+                                        editing = editing,
+                                        onEdit = { editCat = sc },
+                                        onDelete = { scope.launch { deleteCat = sc to repo.dao.categoryUsage(sc.id) } },
+                                    ) { catId = sc.parentId ?: 0L; subId = sc.id; view = "sub" }
                                 }
                             }
                         } }
@@ -198,7 +265,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                             rows.forEach { s ->
                                 val st = tx.filter { it.subcategoryId == s?.id }
                                 SubRow(
-                                    name = s?.name ?: "No subcategory", count = st.size,
+                                    name = s?.name ?: "No subcategory", count = lk.merged(st).size,
                                     spent = Money.format(st.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency),
                                     earned = Money.format(st.filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency),
                                     editing = editing && s != null,
@@ -219,10 +286,17 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                         inPeriod(it) && if (isAcc) it.accountId == accId || it.toAccountId == accId
                         else it.categoryId == catId && it.subcategoryId == (if (subId == NO_SUB) null else subId)
                     }.let { if (isAcc) it else lk.merged(it) }
+                    // Account view: split-bill parts show their own amount, so no merging there.
                     item(key = "detail-head") { Column {
                         val title = if (isAcc) lk.acc[accId]?.name ?: "" else
                             (lk.cat[catId]?.name ?: "") + " › " + (if (subId == NO_SUB) "No subcategory" else lk.cat[subId]?.name ?: "")
-                        BackRow(if (isAcc) "All accounts" else lk.cat[catId]?.name ?: "Back") { back() }
+                        BackRow(
+                            when {
+                                isAcc -> "All accounts"
+                                mode == SUBCATEGORIES -> "All subcategories"
+                                else -> lk.cat[catId]?.name ?: "Back"
+                            }
+                        ) { back() }
                         Card {
                             Column(Modifier.padding(14.dp)) {
                                 Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
@@ -240,7 +314,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                             if (list.isEmpty()) EmptyState("No records in this period.")
                             list.forEachIndexed { i, t ->
                                 if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                                TxnRow(t, lk, showDate = true) { nav.navigate(Routes.edit(t.id)) }
+                                TxnRow(t, lk, showDate = true) { openId = t.id }
                             }
                         }
                     }
@@ -265,7 +339,8 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                 val n = txns.count { inPeriod(it) && (it.accountId == a.account.id || it.toAccountId == a.account.id) }
                                 ItemRow(
                                     icon = a.account.icon, color = a.account.color, title = a.account.name,
-                                    subtitle = "$n records in ${if (allTime) "total" else Dates.shortMonth(month)}",
+                                    subtitle = periodName,
+                                    count = records(n),
                                     amount = Money.format(a.balance, currency),
                                     amountColor = if (a.balance < 0) MoneyColors.expense else MaterialTheme.colorScheme.onSurface,
                                     editing = editing, onEdit = { editAcc = a.account }, onDelete = null,
@@ -280,6 +355,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
     }
 
     editCat?.let { CategoryEditDialog(it, cats, onDismiss = { editCat = null }) }
+    openId?.let { RecordSheet(it, nav) { openId = null } }
     editAcc?.let { AccountEditDialog(it, onDismiss = { editAcc = null }, onMessage = { msg -> scope.launch { snackbar.showSnackbar(msg) } }) }
     deleteCat?.let { (c, used) ->
         val subsNote = if (c.parentId == null) " Its subcategories will be deleted too." else ""
@@ -350,6 +426,7 @@ private fun ItemRow(
     color: Long,
     title: String,
     subtitle: String,
+    count: String? = null,
     amount: String,
     amountColor: Color,
     editing: Boolean,
@@ -372,7 +449,10 @@ private fun ItemRow(
                 )
             }
             Spacer(Modifier.width(8.dp))
-            Text(amount, fontWeight = FontWeight.Black, color = amountColor)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(amount, fontWeight = FontWeight.Black, color = amountColor, maxLines = 1)
+                if (count != null) Text(count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
         }
         if (editing) {
             IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, "Edit $title") }

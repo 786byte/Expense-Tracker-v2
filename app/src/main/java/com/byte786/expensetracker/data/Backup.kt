@@ -60,6 +60,16 @@ object Backup {
                 zip.putNextEntry(ZipEntry("data.json"))
                 zip.write(json.toString().toByteArray())
                 zip.closeEntry()
+                // Custom icons used by categories and accounts.
+                (categories.map { it.icon } + accounts.map { it.icon }).filter { it.startsWith("file:") }
+                    .map { it.removePrefix("file:") }.distinct().forEach { name ->
+                        val f = repo.iconFile(name)
+                        if (f.exists()) {
+                            zip.putNextEntry(ZipEntry("icons/$name"))
+                            f.inputStream().use { it.copyTo(zip) }
+                            zip.closeEntry()
+                        }
+                    }
                 txns.mapNotNull { it.photo }.distinct().forEach { name ->
                     val f = repo.photoFile(name)
                     if (f.exists()) {
@@ -77,6 +87,7 @@ object Backup {
         val repo = ExpenseApp.instance.repo
         var json: JSONObject? = null
         val tmpDir = File(ctx.cacheDir, "restore").apply { deleteRecursively(); mkdirs() }
+        val tmpIcons = File(ctx.cacheDir, "restore-icons").apply { deleteRecursively(); mkdirs() }
         ctx.contentResolver.openInputStream(uri)?.use { input ->
             ZipInputStream(input.buffered()).use { zip ->
                 while (true) {
@@ -86,6 +97,10 @@ object Backup {
                         e.name.startsWith("photos/") && !e.isDirectory -> {
                             val name = File(e.name).name
                             File(tmpDir, name).outputStream().use { zip.copyTo(it) }
+                        }
+                        e.name.startsWith("icons/") && !e.isDirectory -> {
+                            val name = File(e.name).name
+                            File(tmpIcons, name).outputStream().use { zip.copyTo(it) }
                         }
                     }
                 }
@@ -101,6 +116,9 @@ object Backup {
         repo.photosDir.listFiles()?.forEach { it.delete() }
         tmpDir.listFiles()?.forEach { it.copyTo(repo.photoFile(it.name), overwrite = true) }
         tmpDir.deleteRecursively()
+        // Keep icons already on the phone (an older backup may not contain them); add the backup's.
+        tmpIcons.listFiles()?.forEach { it.copyTo(repo.iconFile(it.name), overwrite = true) }
+        tmpIcons.deleteRecursively()
         repo.dao.replaceAll(accounts, categories, txns)
     }
 

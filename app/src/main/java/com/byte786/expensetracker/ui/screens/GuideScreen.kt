@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PieChart
@@ -52,16 +54,22 @@ private data class GuideTopic(val icon: ImageVector, val title: String, val body
 private val topics = listOf(
     GuideTopic(
         Icons.Filled.Home, "The home screen",
-        "• Top left: the status cat. Tap it to see why it feels that way:\n" +
-            "    😿 crying: your total balance is below zero\n" +
+        "• Top left: the status cat. Its face follows your total balance compared with your usual monthly income:\n" +
+            "    😿 crying hard with an empty bowl: deep in debt\n" +
+            "    🙀 worried, sweating: a little in debt\n" +
             "    😾 angry: this month you spent more than you earned\n" +
-            "    🐱 neutral: this month is about even (or nothing recorded yet)\n" +
-            "    😺 happy: this month you earned more than you spent\n" +
+            "    🐱 neutral: about even\n" +
+            "    😺 smiling: in plus\n" +
+            "    😎 sunglasses: well in plus\n" +
+            "  Tap it for advice: where you stand, this month vs last month, the category growing fastest, " +
+            "your saving rate, a daily budget for the days left, and loan warnings.\n" +
             "• Middle: a cat chasing money. There's a different cat for every day of the week.\n" +
             "• Top right: your total balance across all accounts (it can be negative).\n" +
             "• Below: income and expense of the month you're looking at. Tap either to see those records.\n" +
             "• The month box on the right: arrows go back and forward, tapping the name jumps to any month.\n" +
-            "• Then every record of that month, grouped by day. Tap one to edit or delete it.",
+            "• Then every record of that month, grouped by day. Tap one to see its summary.\n" +
+            "• 🔍 at the top searches all records.\n" +
+            "You can hide parts of Home or change their order in Backup & settings → Home screen.",
     ),
     GuideTopic(
         Icons.Filled.Add, "Adding a record",
@@ -91,11 +99,19 @@ private val topics = listOf(
     ),
     GuideTopic(
         Icons.Filled.AccountBalanceWallet, "Accounts tab",
-        "The bottom bar's left button. It has two parts:\n\n" +
-            "Categories: every category with how much went through it. Tap a category to see its subcategories " +
-            "with what you spent and earned on each. Tap a subcategory to see every record in it.\n\n" +
-            "Accounts: Cash, bKash, Bank… with their balances. Tap one to see its records.\n\n" +
-            "At the top you choose the period: a month (arrows, or tap it to pick) or All time.",
+        "The bottom bar's left button. It opens on your Accounts: Cash, bKash, Bank… with their balances. " +
+            "Tap one to see its records.\n\n" +
+            "Tap the title at the top (“Accounts ▾”) to switch to:\n" +
+            "• Categories: every category with its total and number of records. Tap one to see its subcategories, " +
+            "then a subcategory to see its records.\n" +
+            "• Subcategories: all subcategories in one list, each with its total.\n\n" +
+            "Below the title you choose the period: a month (arrows, or tap it to pick), a Custom range, or All time.",
+    ),
+    GuideTopic(
+        Icons.Filled.Info, "Opening a record",
+        "Tapping a record anywhere (Home, Accounts, Analysis, Search) shows its summary: amount, category › subcategory, " +
+            "account(s) with each part of a split bill, date and time, title, description and photo. " +
+            "Nothing changes until you press Edit. Delete is there too, and asks first.",
     ),
     GuideTopic(
         Icons.Filled.Palette, "Adding, editing and deleting categories and accounts",
@@ -105,6 +121,10 @@ private val topics = listOf(
             "• “Add category / subcategory / account” buttons appear at the end of each list.\n" +
             "• In a category's editor, “Place it” moves it inside another category, e.g. Bike Maintenance inside Bike; " +
             "its records move with it.\n" +
+            "• “Merge into another…” moves all records (and subcategories) of one category into another and removes it, " +
+            "e.g. when you have two “Education” categories.\n" +
+            "• Icons: the first button in the icon grid uses a picture from your gallery. You crop it to a circle and it " +
+            "becomes the icon. These pictures are included in backups.\n" +
             "Press Done when finished.",
     ),
     GuideTopic(
@@ -114,21 +134,34 @@ private val topics = listOf(
     ),
     GuideTopic(
         Icons.Filled.PieChart, "Analysis tab",
-        "The bottom bar's right button. Choose Expense, Income or Both, and a month or All time.\n" +
+        "The bottom bar's right button. Choose Expense, Income or Both, and a month, a Custom range or All time.\n" +
             "• The pie shows where the money went (or came from); Both compares income with expense.\n" +
-            "• The bars compare income and expense over the last 6 months.\n" +
-            "• At the bottom: your biggest expense and biggest income ever.",
+            "• The bars compare income and expense over 6 months.\n" +
+            "• At the bottom: your biggest expense and biggest income ever. Tap one to see it.",
     ),
     GuideTopic(
         Icons.Filled.Search, "Side menu & search",
-        "Tap ☰ or swipe from the left edge. At the top is the search box and quick buttons: Today, This month, " +
-            "Last month, This year, Pick a date, Pick a month, By category. Below: Backup & settings, Export, Import CSV, " +
-            "this Guide, and Delete & reset.",
+        "Tap ☰ or swipe from the left edge for: Backup & settings, Export, Import CSV, this Guide, and Delete & reset.\n\n" +
+            "Search is the 🔍 at the top of Home. It filters by words (title, description, category, account, amount), " +
+            "type, category or subcategory, and date: today, this month, last month, this year, a date, a month, a custom range or all time.",
     ),
     GuideTopic(
-        Icons.Filled.CameraAlt, "Memos & photos",
-        "Every record has a memo and can hold one photo (camera or gallery). Photos are shrunk automatically. " +
-            "Memos are searchable.",
+        Icons.Filled.Tune, "Making it yours",
+        "Backup & settings has:\n" +
+            "• Theme: Ginger, Midnight black cat, Siamese cream, Grey tabby or Calico, each with light and dark versions; " +
+            "Pure black (AMOLED) for dark mode; or your wallpaper's colors.\n" +
+            "• Text size: Small to Huge.\n" +
+            "• Icon on records in lists: the category's (default) or the subcategory's.\n" +
+            "• “Pick icons from category names” gives categories matching icons (Deen → mosque, Fragrance → perfume…).\n" +
+            "• Home screen: show or hide the status cat, running cat, total balance and month totals, and change the order.\n" +
+            "• Status cat: how strict it is (what counts as even, and as very in debt / in plus).\n" +
+            "• Currency: symbol, before or after the number, with or without paisa, and 1,00,000-style grouping.",
+    ),
+    GuideTopic(
+        Icons.Filled.CameraAlt, "Titles, descriptions & photos",
+        "Every record has a title (shown in lists), a description (shown in the summary) and can hold one photo " +
+            "(camera or gallery). After taking or choosing a photo you can crop and rotate it before it's saved. " +
+            "Photos are shrunk automatically. Titles and descriptions are searchable.",
     ),
     GuideTopic(
         Icons.Filled.CloudUpload, "Backup to Google Drive, export & import",

@@ -65,6 +65,10 @@ import com.byte786.expensetracker.ui.Routes
 import com.byte786.expensetracker.ui.components.EmptyState
 import com.byte786.expensetracker.ui.components.Lookup
 import com.byte786.expensetracker.ui.components.PeriodBar
+import com.byte786.expensetracker.ui.components.PeriodState
+import com.byte786.expensetracker.ui.components.RecordSheet
+import com.byte786.expensetracker.ui.components.rememberLookup
+import com.byte786.expensetracker.ui.components.rememberPeriodState
 import com.byte786.expensetracker.ui.theme.LocalCurrency
 import com.byte786.expensetracker.ui.theme.MoneyColors
 import java.time.YearMonth
@@ -81,15 +85,14 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
     val txns by repo.txns.collectAsState()
     val cats by repo.categories.collectAsState()
     val accs by repo.accounts.collectAsState()
-    val lk = remember(cats, accs, txns) { Lookup(cats, accs.map { it.account }, txns) }
+    val lk = rememberLookup(cats, accs, txns)
     val currency = LocalCurrency.current
 
     var mode by rememberSaveable { mutableIntStateOf(TxnType.EXPENSE) } // EXPENSE, INCOME or BOTH
-    var month by rememberSaveable { mutableStateOf(YearMonth.now()) }
-    var allTime by rememberSaveable { mutableStateOf(false) }
-
-    val range = Dates.monthRange(month)
-    val period = remember(txns, month, allTime) { txns.filter { allTime || (it.date >= range.first && it.date < range.second) } }
+    val periodState = rememberPeriodState()
+    var openId by remember { mutableStateOf<Long?>(null) }
+    val range = periodState.range
+    val period = remember(txns, range) { txns.filter { periodState.contains(it.date) } }
     val income = period.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
     val expense = period.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
     val incomeColor = MoneyColors.income
@@ -128,14 +131,14 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
                             SegmentedButton(mode == v, { mode = v }, SegmentedButtonDefaults.itemShape(i, 3)) { Text(label) }
                         }
                     }
-                    PeriodBar(month, allTime, onMonth = { month = it; allTime = false }, onAllTime = { allTime = true })
+                    PeriodBar(periodState)
                 }
             }
 
             item(key = "pie") {
                 Panel {
                     if (total == 0L) {
-                        EmptyState("Nothing to show for ${if (allTime) "all time" else Dates.month(month)}")
+                        EmptyState("Nothing to show for ${periodState.label}")
                     } else {
                         Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
                             Donut(slices.map { it.color to it.value }, Modifier.size(200.dp))
@@ -181,7 +184,15 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
                 Panel {
                     Text("Income vs expense by month", fontWeight = FontWeight.Black)
                     Spacer(Modifier.height(12.dp))
-                    TrendChart(txns, if (allTime) YearMonth.now() else month, incomeColor, expenseColor)
+                    TrendChart(
+                        txns,
+                        when (periodState.mode) {
+                            PeriodState.MONTH -> periodState.month
+                            PeriodState.RANGE -> YearMonth.from(Dates.date(periodState.until - 1))
+                            else -> YearMonth.now()
+                        },
+                        incomeColor, expenseColor,
+                    )
                 }
             }
 
@@ -190,12 +201,13 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
                 val bigExp = bills.filter { it.type == TxnType.EXPENSE }.maxByOrNull { it.amount }
                 val bigInc = bills.filter { it.type == TxnType.INCOME }.maxByOrNull { it.amount }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    RecordCard("Biggest expense ever", bigExp, lk, expenseColor, Modifier.weight(1f)) { nav.navigate(Routes.edit(it.id)) }
-                    RecordCard("Biggest income ever", bigInc, lk, incomeColor, Modifier.weight(1f)) { nav.navigate(Routes.edit(it.id)) }
+                    RecordCard("Biggest expense ever", bigExp, lk, expenseColor, Modifier.weight(1f)) { openId = it.id }
+                    RecordCard("Biggest income ever", bigInc, lk, incomeColor, Modifier.weight(1f)) { openId = it.id }
                 }
             }
         }
     }
+    openId?.let { RecordSheet(it, nav) { openId = null } }
 }
 
 @Composable
