@@ -25,14 +25,14 @@ Work branch: `claude/android-expense-tracker-go5jzv` (not merged into `main`; no
     or Kotlin downloads. That is not a code error. Re-run with
     `actions_run_trigger` `rerun_failed_jobs` (it took 4 attempts once).
   - Pushes that change only `**.md` or `docs/**` don't trigger a build.
-- **Local unit tests for pure-Kotlin code** (parsers, calculator) work without
+- **Local unit tests for pure-Kotlin code** (parsers, calculator, `Mood`, `Advice`, `Money` formatting, `guessIcon`) work without
   Android. Download `kotlin-compiler-embeddable` 2.1.0, `kotlin-stdlib`, trove4j,
   `kotlin-script-runtime`, `kotlin-reflect`, annotations, coroutines, junit and
   hamcrest from `https://repo.maven.apache.org/maven2` (repo1.maven.org is often
   rate-limited). Then compile with
   `java -cp <jars> org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib ...` and
-  run `org.junit.runner.JUnitCore`. A one-line stub `object TxnType` is needed when
-  compiling outside the app.
+  run `org.junit.runner.JUnitCore`. A stub `object TxnType` (and a plain `data class Txn`
+  without Room annotations, for Mood/Advice) is needed when compiling outside the app.
 - **Signing**: `app/keystore/shared.keystore` (password `android`, alias
   `expensetracker`) is committed so updates install over each other. The repo is
   public, so the key is public too. The owner knows this.
@@ -48,31 +48,40 @@ Work branch: `claude/android-expense-tracker-go5jzv` (not merged into `main`; no
 | `data/Entities.kt` | `Account`, `Category` (parentId = subcategory), `Txn` (type, amount in **paisa**, date millis, accountId, toAccountId, categoryId, subcategoryId, `memo` = title, `description`, `photo`, `groupId`) |
 | `data/AppDatabase.kt` | Room **v2**; `MIGRATION_1_2` adds `description` and `groupId` (both nullable, no defaults) |
 | `data/AppDao.kt` | Queries, account balances SQL, `replaceTxns`, `moveCategory`, `replaceAll` |
-| `data/Repository.kt` | StateFlows (`txns`, `categories`, `accounts`), `launch{}` for writes that must survive screen close, `saveRecords`, `deleteTxn` (deletes the whole split group), resets with a safety copy, `voiceDraft` |
-| `data/Backup.kt` / `BackupScheduler.kt` | Zip backup (data.json + photos) to a user-chosen file (e.g. Google Drive) via SAF; auto backup 30 s after changes plus daily; restore; CSV export |
-| `data/CsvParser.kt` / `CsvImport.kt` | Import from other apps' CSV (tolerant quoting, multi-line notes split into title/description, `From->To` transfers, dedupe, `Bike X` → Bike › X) |
+| `data/Repository.kt` | StateFlows (`txns`, `categories`, `accounts`), `launch{}` for writes that must survive screen close, `saveRecords`, `deleteTxn` (deletes the whole split group), resets with a safety copy, `voiceDraft`, `iconsDir`/`iconFile`/`customIcons`, `mergeCategory`, `refreshCategoryIcons`, orphan photo/icon cleanup at start |
+| `data/Backup.kt` / `BackupScheduler.kt` | Zip backup (data.json + photos/ + icons/) to a user-chosen file (e.g. Google Drive) via SAF; auto backup 30 s after changes plus daily; restore; CSV export |
+| `data/CsvParser.kt` / `CsvImport.kt` | Import from other apps' CSV (tolerant quoting, multi-line notes split into title/description, `From->To` transfers, dedupe, `Bike X` → Bike › X); public `guessIcon()` (word-start rules, first match wins) |
 | `data/Calc.kt` | Calculator expression evaluator (`600+400-50`) |
 | `data/VoiceParser.kt` | Spoken English → draft record, matching the user's own category, subcategory and account names |
-| `data/Prefs.kt` | SharedPreferences: currency, theme mode, dynamic colour, backup URI, flags |
+| `data/Prefs.kt` | SharedPreferences: currency + format (symbol after, decimals, Indian grouping), theme mode, palette, AMOLED, font size, dynamic colour, list icon (category/sub), Home order/hidden parts, mood thresholds, backup URI, flags |
+| `data/Mood.kt` | `CatMood` enum (VERY_DEBT, DEBT, ANGRY, NEUTRAL, PLUS, RICH, PLAIN) + `MoodRules.mood()` (balance vs usual monthly income, % thresholds) and `averageIncome()` |
+| `data/Advice.kt` | Rule-based tips for the status-cat sheet (balance, month vs last month to same day, fastest-growing category, saving rate, daily budget, loan/negative accounts) |
+| `data/Photos.kt` | `load()` (EXIF-upright, downscaled Bitmap), `savePhoto()` JPEG ≤1600 px, `saveIcon()` PNG 256 px |
 | `data/Seed.kt` | Default accounts and categories on first run |
-| `ui/AppRoot.kt` | Drawer (search box + chips, Backup & settings, Export, Import CSV, Guide, Delete & reset) + bottom bar (Accounts / Home / Analysis) + NavHost |
+| `ui/AppRoot.kt` | Drawer (status cat + balance, Backup & settings, Export, Import CSV, Guide, Delete & reset; no search) + bottom bar (Accounts / Home / Analysis) + NavHost |
 | `ui/Routes.kt` | Routes; `settings?action=export|import` |
-| `ui/AppIcons.kt` | Icon keys → Material icons, colour palette |
-| `ui/theme/Theme.kt` | Cat palette (cream/ginger light, dark-brown dark), `MoneyColors`, `LocalCurrency` |
-| `ui/components/Common.kt` | `Lookup` (maps + `merged()` that turns split bills into one row), `TxnRow`, day-grouped lists, `PeriodBar`, dialogs, icon/colour picker |
-| `ui/components/Cats.kt` | Canvas cats: `CatFace` (HAPPY/CRYING/ANGRY/NEUTRAL/PLAIN + badge), `statusMood()`, `RunningCat` with 7 weekday `CatCoat`s |
+| `ui/AppIcons.kt` | Icon keys → Material icons (90+), `CustomIcons` (Perfume, Mosque vectors), colour palette. Icon key `file:<name>` = picture in `filesDir/icons` |
+| `ui/Format.kt` | `Money` (format with global `MoneyStyle`, Indian grouping), `Dates` |
+| `ui/theme/Theme.kt` | `CatPalette` enum (GINGER hand-tuned; MIDNIGHT, SIAMESE, GREY_TABBY, CALICO derived with `lerp`), AMOLED override, font scale via `LocalDensity`, `LocalMoneyStyle` (static, forces full recomposition), `LocalCatStyle` (status cat colours per theme), `MoneyColors`, `LocalCurrency` |
+| `ui/components/Common.kt` | `Lookup` (maps + `merged()`; `subIcon` flag) and `rememberLookup()` (follows the list-icon setting), `CategoryIcon` (handles `file:`), `TxnRow`, day-grouped lists, `PeriodState`/`rememberPeriodState()`/`PeriodBar` (month · custom range · all time), `DateRangeDialog`, dialogs, `IconColorPicker` (with “use a picture” + crop) |
+| `ui/components/RecordSheet.kt` | Read-only record summary bottom sheet (parts of split bills, description, photo) with Edit / Delete; used by every list |
+| `ui/components/AdviceSheet.kt` | `Status` + `rememberStatus()` (mood inputs, usual income = avg of last 3 months with income), `AdviceSheet`, `moodReason()` |
+| `ui/components/Crop.kt` | `CropDialog`: full-screen crop (move box, drag corners, free/square, rotate 90°) |
+| `ui/components/Cats.kt` | Canvas cats: `CatFace` (6 moods + PLAIN, small animations: tears, sweat, shake, bob, blink, sparkle; colours from `LocalCatStyle`), `statusMood()`, `moodName()`, `RunningCat` with 7 weekday `CatCoat`s |
 | `ui/components/Pickers.kt` | `CalculatorSheet`, `CategorySheet` (icon grid), `SubcategorySheet` (name list), both with edit mode |
 | `ui/components/VoiceInput.kt` | `RecognizerIntent` (en-IN) launcher + parse |
-| `ui/screens/HomeScreen.kt` | Status cat (tap → tooltip mood), running cat, total balance, month totals + switcher, records list, + menu with 3 cats, mic button |
-| `ui/screens/EditTransactionScreen.kt` | Add/edit: type, calculator amount, category/sub buttons, **several source accounts** (first gets the rest), transfer from/to, date/time, title, description, photo, voice fill |
-| `ui/screens/AccountsTab.kt` | Categories → subcategories → records; Accounts → records; Edit mode; own period |
-| `ui/screens/AnalysisScreen.kt` | Expense/Income/Both donut + legend, 6-month bars, biggest records |
-| `ui/screens/SearchScreen.kt`, `SettingsScreen.kt`, `GuideScreen.kt`, `ManageDialogs.kt` | Search & filters; backup/restore/import/export/undo reset/theme/currency; in-app guide; category & account edit dialogs |
+| `ui/screens/HomeScreen.kt` | Blocks in `prefs.homeOrder` (hero / totals / records), parts hideable; status cat (tap → AdviceSheet), running cat, total balance, month totals + switcher, records (tap → RecordSheet), + menu with 3 cats, mic and search buttons |
+| `ui/screens/EditTransactionScreen.kt` | Add/edit: type, calculator amount, category/sub buttons, **several source accounts** (first gets the rest), transfer from/to, date/time, title, description, photo (camera/gallery → CropDialog → save), voice fill |
+| `ui/screens/AccountsTab.kt` | Title menu “Accounts ▾” switches mode: Accounts (default) → records; Categories → subcategories → records; Subcategories (flat) → records. Record counts shown under amounts. Edit mode; own `PeriodState` |
+| `ui/screens/AnalysisScreen.kt` | Expense/Income/Both donut + legend, 6-month bars, biggest records (tap → RecordSheet); `PeriodState` |
+| `ui/screens/SearchScreen.kt`, `SettingsScreen.kt`, `GuideScreen.kt`, `ManageDialogs.kt` | Search & filters (date menu incl. custom range / All time); backup/restore/import/export/undo reset, Appearance (themes, AMOLED, text size, list icon, “pick icons from names”), Home screen layout, Status cat sliders, Currency format; in-app guide; category (place it / merge into) & account edit dialogs |
 
 Conventions:
 - Amounts are `Long` paisa.
 - Writes started from dialogs use `repo.launch {}` so closing the dialog doesn't cancel them.
-- Lists call `lk.merged(list)` so split bills show as one row.
+- Lists call `lk.merged(list)` so split bills show as one row. Build lookups with `rememberLookup()`.
+- Tapping a record opens `RecordSheet` (never the editor directly).
+- History views use `rememberPeriodState()` + `PeriodBar(state)`.
 - Bump the Room version and add a migration for any schema change: the owner has real data, so never use destructive migration.
 
 ## 4. About the owner (preferences)
@@ -88,76 +97,20 @@ Conventions:
   lots of customisation.
 - Sends handwritten sketches and phone screenshots (currently uses dark mode).
 
-## 5. Backlog: the owner's latest requests (not built yet)
+## 5. Backlog
 
-Interpretations are mine. Confirm the items marked **(ask)** before building.
+The whole previous backlog was built in build 7 (release `build-7`) (record summary sheet, crop, period
+choices incl. custom range, list icon setting, drawer search removed, Accounts tab title
+menu with a flat Subcategories view, 5 themes + AMOLED, custom picture icons, text size,
+Home sections, currency format, 6-mood status cat with %-of-income thresholds and an
+advice sheet, more icons + “pick icons from names”, record counts no longer truncated,
+merge categories, README refreshed). Owner's answers: Subcategories = separate flat
+list; mood thresholds = % of usual monthly income (sliders in Settings); extra
+customisation = font size, Home sections, currency format.
 
-1. **Crop photos** when attaching (camera or gallery) before saving. Use a crop
-   library (e.g. CanHub Android-Image-Cropper, which needs mavenCentral) or a
-   simple Compose crop screen.
-2. **Tapping a record never opens edit directly**, on Home, in Analysis (biggest
-   records), in Search and in Accounts lists. Instead show a **summary sheet**:
-   amount, type, category › subcategory, account(s) incl. split parts, date/time,
-   title, **description**, photo thumbnail, with an **Edit** button (and maybe
-   Delete). The Edit screen stays as it is.
-3. **Every history view gets period choices: This month · Custom range · All
-   time.** Today `PeriodBar` has month arrows + All time; add custom range
-   (`DateRangePicker`). Apply in the Accounts tab details, Analysis and Search.
-4. **Record icon in lists**: show the **category** icon by default (now it shows
-   the subcategory's), plus a Settings option "Icon in lists: Category /
-   Subcategory". `Lookup.icon()` decides this.
-5. **Remove search from the side menu completely** (the box and the quick chips).
-   Keep the search icon in Home's top bar. Remove the drawer's search code and
-   update the Guide.
-6. *(Same as 2 for Analysis.)*
-7. **Accounts tab redesign**: the tab shows **Accounts** by default. Remove the
-   Categories/Accounts segmented control. Tapping the **title at the top**
-   ("Accounts ▾", not the bottom bar) opens a menu to switch the view to
-   **Categories** or **Subcategories** (a flat list of all subcategories with
-   totals). The bottom bar keeps Accounts on the left. **(ask)** whether
-   "Subcategories" should be a separate flat view or reached through categories.
-8. **Much more customisation**:
-   - **Several themes**: e.g. Ginger (current), Midnight black cat, Siamese
-     cream, Grey tabby, Calico, plus AMOLED black. Choose in Settings; keep
-     light/dark/system and wallpaper colours.
-   - **Custom icons**: let the user pick an image, crop it, and use it as a
-     category or account icon. Store the file in `filesDir/icons`; the `icon`
-     key could be `file:<name>`, and backups must include it.
-   - **(ask)** what else to make customisable (font size? home sections
-     order/visibility? currency format?).
-9. **Status cat (top-left of Home) more expressive, scaled to how much in debt
-   or in plus.** Ideas: very in debt (crying hard, empty bowl), slightly in debt
-   (worried), even (neutral), slightly up (smile), well up (sunglasses / money
-   eyes), angry when this month's spending is over income. Little animations.
-   **(ask)** the thresholds (e.g. as % of monthly income, or fixed ৳ amounts set
-   in Settings).
-10. **Tap the status cat → advice** instead of just the mood. Rule-based, no AI:
-    - Where the balance stands.
-    - This month vs last month spending.
-    - The category that grew most.
-    - Saving rate.
-    - Days left in the month with an average daily budget.
-    - Loan account warnings.
-    Show it in a bottom sheet with the cat.
-11. **More icons**, matching their real categories (see screenshots in the
-    conversation): Pulsar N160 (motorcycle), Aura Maxing (shield /
-    self-improvement), Deen (mosque), Phone (smartphone), Fragrance / Attar
-    (perfume bottle; may need a custom vector), Moms Tax (hand with money /
-    tax), Tution / Tuition (teacher, history_edu), Education / Alliance
-    Française (language / translate), Job / Application (description / work),
-    Subscription / Claude (subscriptions / autorenew), Pc (computer), Salary,
-    Mom's Blessing (volunteer_activism), Grooming, Vape, Theatre
-    (theater_comedy), Lottery (casino / confirmation_number), Sale (sell),
-    Grants (redeem), Barber (content_cut), Gym (fitness_center), Games, Fuel,
-    Headphones. Then set better default icons for those category names
-    (`CsvImport.guessIcon`).
-
-Smaller things seen in the screenshots:
-- Category subtitles truncate ("5 r…"). Show the record count separately or use
-  two lines.
-- There are two "Education" categories (an old one and the user's). Offer a
-  merge-categories action (move all records of one into another).
-- README.md is out of date (mentions menu → Categories); refresh it.
+Nothing new is queued. Ideas if the owner asks for more: budgets per category with the
+cat warning, recurring records, home-screen widget, re-crop an already attached photo,
+drag-to-reorder categories/accounts, first day of month (salary day).
 
 ## 6. Prompt to paste into the new session
 
