@@ -8,7 +8,7 @@ class IconGuessTest {
 
     @Test fun ownerCategories() {
         assertEquals("bike", g("Pulsar N160"))
-        assertEquals("selfimprove", g("Aura Maxing"))
+        assertEquals("powerup", g("Aura Maxing"))
         assertEquals("mosque", g("Deen"))
         assertEquals("perfume", g("Fragrance"))
         assertEquals("tax", g("Moms Tax"))

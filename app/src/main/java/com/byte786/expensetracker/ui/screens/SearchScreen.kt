@@ -115,8 +115,8 @@ fun SearchScreen(
                 (q.isEmpty() || lk.searchable(t).lowercase().contains(q))
         }.let { lk.merged(it) }
     }
-    val totalExpense = results.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
-    val totalIncome = results.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
+    val totalExpense = results.filter { it.type == TxnType.EXPENSE && lk.counts(it) }.sumOf { it.amount }
+    val totalIncome = results.filter { it.type == TxnType.INCOME && lk.counts(it) }.sumOf { it.amount }
 
     Scaffold(
         topBar = {

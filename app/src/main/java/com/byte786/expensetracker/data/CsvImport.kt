@@ -28,7 +28,8 @@ object CsvImport {
         val rules = listOf(
             "pulsar" to "bike", "motorcycle" to "bike", "bike" to "bike", "mobil" to "oil",
             "fuel" to "fuel", "petrol" to "fuel", "octane" to "fuel", "car" to "car",
-            "aura" to "selfimprove", "maxing" to "selfimprove", "self" to "selfimprove",
+            "aura" to "powerup", "maxing" to "powerup", "saiyan" to "powerup", "anime" to "powerup", "sigma" to "sigma",
+            "self" to "selfimprove", "ramen" to "ramen", "drip" to "diamond", "stream" to "stream",
             "deen" to "mosque", "mosque" to "mosque", "masjid" to "mosque", "zakat" to "charity", "sadaqah" to "charity",
             "fragrance" to "perfume", "attar" to "perfume", "perfume" to "perfume",
             "tax" to "tax", "blessing" to "charity", "mom" to "charity",

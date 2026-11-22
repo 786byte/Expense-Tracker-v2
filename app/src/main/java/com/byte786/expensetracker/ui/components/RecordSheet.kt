@@ -110,10 +110,18 @@ fun RecordSheet(id: Long, nav: NavController, onDismiss: () -> Unit) {
                 )
                 parts.size > 1 -> Field(
                     if (t.type == TxnType.INCOME) "Received in" else "Paid from",
-                    parts.joinToString("\n") { "${lk.acc[it.accountId]?.name ?: "?"}: ${Money.format(it.amount, currency)}" },
+                    parts.joinToString("\n") {
+                        "${lk.acc[it.accountId]?.name ?: "?"}: ${Money.format(it.amount, currency)}" +
+                            if (it.accountId in lk.tracking) "  (tracking only, not counted)" else ""
+                    },
                 )
                 else -> Field(if (t.type == TxnType.INCOME) "Received in" else "Paid from", lk.acc[t.accountId]?.name ?: "?")
             }
+            val own = parts.filter { lk.counts(it) }.sumOf { it.amount }
+            if (own != total) Field(
+                if (t.type == TxnType.INCOME) "Counted as your income" else "Counted as your expense",
+                Money.format(own, currency),
+            )
             Field("Date", "${Dates.fullDay(Dates.date(t.date))}, ${Dates.time(t.date)}")
             if (t.memo.isNotBlank()) Field("Title", t.memo)
             if (!t.description.isNullOrBlank()) Field("Description", t.description)

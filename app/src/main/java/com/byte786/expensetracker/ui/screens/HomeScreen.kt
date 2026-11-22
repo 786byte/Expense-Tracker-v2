@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.byte786.expensetracker.ExpenseApp
 import com.byte786.expensetracker.data.TxnType
+import com.byte786.expensetracker.data.totalBalance
 import com.byte786.expensetracker.ui.Dates
 import com.byte786.expensetracker.ui.Money
 import com.byte786.expensetracker.ui.Routes
@@ -101,9 +102,10 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
 
     val range = Dates.monthRange(month)
     val monthTx = remember(txns, month) { txns.filter { it.date >= range.first && it.date < range.second } }
-    val income = monthTx.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
-    val expense = monthTx.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
-    val total = accs.sumOf { it.balance }
+    val ownTx = lk.own(monthTx)
+    val income = ownTx.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
+    val expense = ownTx.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
+    val total = accs.totalBalance()
 
     BackHandler(enabled = fabOpen) { fabOpen = false }
 

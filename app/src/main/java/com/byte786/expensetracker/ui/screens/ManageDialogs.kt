@@ -45,6 +45,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -229,6 +230,7 @@ fun AccountEditDialog(initial: Account, onDismiss: () -> Unit, onMessage: (Strin
     var icon by remember { mutableStateOf(initial.icon) }
     var color by remember { mutableStateOf(initial.color) }
     var opening by remember { mutableStateOf(Money.toInput(initial.initialBalance)) }
+    var tracking by remember { mutableStateOf(initial.tracking) }
     val isNew = initial.id == 0L
 
     AlertDialog(
@@ -241,7 +243,19 @@ fun AccountEditDialog(initial: Account, onDismiss: () -> Unit, onMessage: (Strin
                     Spacer(Modifier.width(12.dp))
                     OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
                 }
-                OutlinedTextField(
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Tracking only", fontWeight = FontWeight.Bold)
+                        Text(
+                            "For money someone else pays, e.g. Mom's grant. Parts paid from it are logged here " +
+                                "but don't count as your expense or income, and it's left out of your total balance. " +
+                                "The Accounts tab shows how much was paid through it.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = tracking, onCheckedChange = { tracking = it })
+                }
+                if (!tracking) OutlinedTextField(
                     opening, { v -> if (v.all { it.isDigit() || it == '.' || it == '-' }) opening = v },
                     label = { Text("Starting balance") }, prefix = { Text(currency) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -254,7 +268,7 @@ fun AccountEditDialog(initial: Account, onDismiss: () -> Unit, onMessage: (Strin
             TextButton(onClick = {
                 if (name.isNotBlank()) {
                     val bal = Money.parse(opening) ?: 0L
-                    repo.launch { repo.saveAccount(initial.copy(name = name.trim(), icon = icon, color = color, initialBalance = bal)) }
+                    repo.launch { repo.saveAccount(initial.copy(name = name.trim(), icon = icon, color = color, initialBalance = bal, tracking = tracking)) }
                     onDismiss()
                 }
             }) { Text("Save") }

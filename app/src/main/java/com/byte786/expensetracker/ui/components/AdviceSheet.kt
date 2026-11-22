@@ -36,6 +36,8 @@ import com.byte786.expensetracker.data.CatMood
 import com.byte786.expensetracker.data.MoodRules
 import com.byte786.expensetracker.data.Txn
 import com.byte786.expensetracker.data.TxnType
+import com.byte786.expensetracker.data.own
+import com.byte786.expensetracker.data.totalBalance
 import com.byte786.expensetracker.ui.Dates
 import com.byte786.expensetracker.ui.Money
 import com.byte786.expensetracker.ui.theme.LocalCurrency
@@ -59,11 +61,13 @@ fun rememberStatus(txns: List<Txn>, accs: List<AccountBalance>): Status {
     return remember(txns, accs, neutral, very) {
         val now = YearMonth.now()
         val (f, t) = Dates.monthRange(now)
-        val month = txns.filter { it.date >= f && it.date < t }
+        val tracking = accs.filter { it.account.tracking }.map { it.account.id }.toSet()
+        val mine = txns.own(tracking)
+        val month = mine.filter { it.date >= f && it.date < t }
         val inc = month.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
         val exp = month.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
-        val ref = MoodRules.averageIncome(txns, (1..3).map { Dates.monthRange(now.minusMonths(it.toLong())) })
-        val total = accs.sumOf { it.balance }
+        val ref = MoodRules.averageIncome(mine, (1..3).map { Dates.monthRange(now.minusMonths(it.toLong())) })
+        val total = accs.totalBalance()
         Status(statusMood(total, inc, exp, ref, neutral, very), total, inc, exp, ref)
     }
 }
@@ -79,7 +83,8 @@ fun AdviceSheet(status: Status, onDismiss: () -> Unit) {
     val tips = remember(txns, cats, accs, status, currency) {
         val names = cats.associate { it.id to it.name }
         Advice.tips(
-            txns, accs.map { Advice.AccountInfo(it.account.name, it.balance) },
+            txns.own(accs.filter { it.account.tracking }.map { it.account.id }.toSet()),
+            accs.filter { !it.account.tracking }.map { Advice.AccountInfo(it.account.name, it.balance) },
             categoryName = { names[it] }, refIncome = status.refIncome,
             money = { Money.format(it, currency) },
         )

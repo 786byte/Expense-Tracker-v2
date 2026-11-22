@@ -53,6 +53,7 @@ import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.byte786.expensetracker.ExpenseApp
 import com.byte786.expensetracker.data.AccountBalance
+import com.byte786.expensetracker.data.own
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -103,6 +104,14 @@ class Lookup(
 ) {
     val cat: Map<Long, Category> = cats.associateBy { it.id }
     val acc: Map<Long, Account> = accs.associateBy { it.id }
+    /** Tracking-only accounts (e.g. Mom's grant): logged, but not your own money. */
+    val tracking: Set<Long> = accs.filter { it.tracking }.map { it.id }.toSet()
+
+    /** Whether this record (or merged row) counts in your income/expense totals. */
+    fun counts(t: Txn): Boolean = t.type == TxnType.TRANSFER || t.accountId !in tracking
+
+    /** Only the records that count as your own income/expense. */
+    fun own(list: List<Txn>): List<Txn> = list.own(tracking)
     /** Parts of bills paid from several accounts, by groupId. */
     val groups: Map<Long, List<Txn>> = txns.filter { it.groupId != null }.groupBy { it.groupId!! }
 
@@ -114,7 +123,12 @@ class Lookup(
         val seen = HashSet<Long>()
         return list.mapNotNull { t ->
             val g = t.groupId ?: return@mapNotNull t
-            if (!seen.add(g)) null else t.copy(amount = groups[g]?.sumOf { it.amount } ?: t.amount)
+            if (!seen.add(g)) return@mapNotNull null
+            val parts = groups[g] ?: return@mapNotNull t
+            // The row stands for your own share; parts paid from tracking accounts are left out.
+            val mine = parts.filter { counts(it) }
+            val rep = mine.firstOrNull() ?: parts.first()
+            rep.copy(amount = (mine.ifEmpty { parts }).sumOf { it.amount })
         }
     }
 
@@ -128,7 +142,9 @@ class Lookup(
     fun accountText(t: Txn): String {
         t.groupId?.let { g ->
             val parts = groups[g]
-            if (parts != null && parts.size > 1) return parts.joinToString(" + ") { acc[it.accountId]?.name ?: "?" }
+            if (parts != null && parts.size > 1) return parts.joinToString(" + ") { p ->
+                (acc[p.accountId]?.name ?: "?") + if (p.accountId in tracking) " (${Money.format(p.amount, "")})" else ""
+            }
         }
         val from = acc[t.accountId]?.name ?: "?"
         return if (t.type == TxnType.TRANSFER) "$from → ${t.toAccountId?.let { acc[it]?.name } ?: "?"}" else from
@@ -224,13 +240,14 @@ fun TxnRow(t: Txn, lk: Lookup, showDate: Boolean = false, onClick: () -> Unit) {
 /** Adds transactions to a LazyColumn, grouped under a header per day. [txns] must be sorted newest first. */
 fun LazyListScope.txnDayGroups(txns: List<Txn>, lk: Lookup, onClick: (Txn) -> Unit) {
     txns.groupBy { Dates.date(it.date) }.forEach { (day, list) ->
-        item(key = "day-$day") { DayHeader(day, list) }
+        item(key = "day-$day") { DayHeader(day, list, lk) }
         items(list, key = { "t-${it.id}" }) { t -> TxnRow(t, lk) { onClick(t) } }
     }
 }
 
 @Composable
-private fun DayHeader(day: LocalDate, list: List<Txn>) {
+private fun DayHeader(day: LocalDate, all: List<Txn>, lk: Lookup) {
+    val list = all.filter { lk.counts(it) }
     val currency = LocalCurrency.current
     val net = list.sumOf { when (it.type) { TxnType.INCOME -> it.amount; TxnType.EXPENSE -> -it.amount; else -> 0L } }
     Row(

@@ -46,7 +46,7 @@ Work branch: `claude/android-expense-tracker-go5jzv` (not merged into `main`; no
 |---|---|
 | `ExpenseApp.kt` | Application; creates `Repository`, schedules backup |
 | `data/Entities.kt` | `Account`, `Category` (parentId = subcategory), `Txn` (type, amount in **paisa**, date millis, accountId, toAccountId, categoryId, subcategoryId, `memo` = title, `description`, `photo`, `groupId`) |
-| `data/AppDatabase.kt` | Room **v2**; `MIGRATION_1_2` adds `description` and `groupId` (both nullable, no defaults) |
+| `data/AppDatabase.kt` | Room **v3**; `MIGRATION_1_2` adds `description` and `groupId` (nullable); `MIGRATION_2_3` adds `accounts.tracking INTEGER NOT NULL DEFAULT 0` (entity has `@ColumnInfo(defaultValue = "0")`) |
 | `data/AppDao.kt` | Queries, account balances SQL, `replaceTxns`, `moveCategory`, `replaceAll` |
 | `data/Repository.kt` | StateFlows (`txns`, `categories`, `accounts`), `launch{}` for writes that must survive screen close, `saveRecords`, `deleteTxn` (deletes the whole split group), resets with a safety copy, `voiceDraft`, `iconsDir`/`iconFile`/`customIcons`, `mergeCategory`, `refreshCategoryIcons`, orphan photo/icon cleanup at start |
 | `data/Backup.kt` / `BackupScheduler.kt` | Zip backup (data.json + photos/ + icons/) to a user-chosen file (e.g. Google Drive) via SAF; auto backup 30 s after changes plus daily; restore; CSV export |
@@ -107,6 +107,8 @@ advice sheet, more icons + “pick icons from names”, record counts no longer 
 merge categories, README refreshed). Owner's answers: Subcategories = separate flat
 list; mood thresholds = % of usual monthly income (sliders in Settings); extra
 customisation = font size, Home sections, currency format.
+
+Build 8 added: **tracking-only accounts** (`Account.tracking`; parts paid from them are logged but excluded from income/expense via `Lookup.counts()/own()` and `List<Txn>.own()`, merged rows show your own share, accounts tab shows “paid through it”, `totalBalance()` skips them), Home-tab fix (`goTab` pops to the start destination by id, falls back to navigate), and Gen-Z icons (custom vectors PowerUp, Crown, Sigma, Skull, Ghost, Katana, Ramen, Diamond + fire, sparkles, trophy, brain, MMA, nightlife…). Icons are generic shapes, not copies of any anime character.
 
 Nothing new is queued. Ideas if the owner asks for more: budgets per category with the
 cat warning, recurring records, home-screen widget, re-crop an already attached photo,

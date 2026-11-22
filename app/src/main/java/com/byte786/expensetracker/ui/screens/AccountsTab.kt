@@ -77,6 +77,7 @@ import com.byte786.expensetracker.data.Account
 import com.byte786.expensetracker.data.Category
 import com.byte786.expensetracker.data.Txn
 import com.byte786.expensetracker.data.TxnType
+import com.byte786.expensetracker.data.totalBalance
 import com.byte786.expensetracker.ui.Dates
 import com.byte786.expensetracker.ui.Money
 import com.byte786.expensetracker.ui.Routes
@@ -202,7 +203,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                         icon = c.icon, color = c.color, title = c.name,
                                         subtitle = if (subs.isEmpty()) "No subcategories" else subs.joinToString { it.name },
                                         count = records(lk.merged(tx).size),
-                                        amount = Money.format(tx.filter { it.type == type }.sumOf { it.amount }, currency),
+                                        amount = Money.format(lk.own(tx).filter { it.type == type }.sumOf { it.amount }, currency),
                                         amountColor = if (type == TxnType.EXPENSE) MoneyColors.expense else MoneyColors.income,
                                         editing = editing,
                                         onEdit = { editCat = c },
@@ -234,7 +235,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                         icon = sc.icon, color = sc.color, title = sc.name,
                                         subtitle = "in ${parent?.name ?: "?"}",
                                         count = records(lk.merged(tx).size),
-                                        amount = Money.format(tx.filter { it.type == type }.sumOf { it.amount }, currency),
+                                        amount = Money.format(lk.own(tx).filter { it.type == type }.sumOf { it.amount }, currency),
                                         amountColor = if (type == TxnType.EXPENSE) MoneyColors.expense else MoneyColors.income,
                                         editing = editing,
                                         onEdit = { editCat = sc },
@@ -257,7 +258,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                         val tx = txns.filter { inPeriod(it) && it.categoryId == c.id }
                         val subs = cats.filter { it.parentId == c.id }
                         BackRow("All categories") { back() }
-                        Header(c.icon, c.color, c.name, "$periodName · spent ${Money.format(tx.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency)} · earned ${Money.format(tx.filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency)}")
+                        Header(c.icon, c.color, c.name, "$periodName · spent ${Money.format(lk.own(tx).filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency)} · earned ${Money.format(lk.own(tx).filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency)}")
                         Label("Subcategories · tap one for details")
                         Card {
                             val rows = subs.map { it as Category? } + (if (tx.any { it.subcategoryId == null }) listOf(null) else emptyList())
@@ -266,8 +267,8 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                 val st = tx.filter { it.subcategoryId == s?.id }
                                 SubRow(
                                     name = s?.name ?: "No subcategory", count = lk.merged(st).size,
-                                    spent = Money.format(st.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency),
-                                    earned = Money.format(st.filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency),
+                                    spent = Money.format(lk.own(st).filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency),
+                                    earned = Money.format(lk.own(st).filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency),
                                     editing = editing && s != null,
                                     onEdit = { if (s != null) editCat = s },
                                 ) { subId = s?.id ?: NO_SUB; view = "sub" }
@@ -287,6 +288,8 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                         else it.categoryId == catId && it.subcategoryId == (if (subId == NO_SUB) null else subId)
                     }.let { if (isAcc) it else lk.merged(it) }
                     // Account view: split-bill parts show their own amount, so no merging there.
+                    // Account view: everything through that account. Category view: only your own share.
+                    val sums = if (isAcc) list else list.filter { lk.counts(it) }
                     item(key = "detail-head") { Column {
                         val title = if (isAcc) lk.acc[accId]?.name ?: "" else
                             (lk.cat[catId]?.name ?: "") + " › " + (if (subId == NO_SUB) "No subcategory" else lk.cat[subId]?.name ?: "")
@@ -303,8 +306,8 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                 Text(periodName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(Modifier.padding(top = 10.dp)) {
                                     Stat("Records", list.size.toString(), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
-                                    Stat("Spent", Money.format(list.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency), MoneyColors.expense, Modifier.weight(1f))
-                                    Stat("Earned", Money.format(list.filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency), MoneyColors.income, Modifier.weight(1f))
+                                    Stat("Spent", Money.format(sums.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency), MoneyColors.expense, Modifier.weight(1f))
+                                    Stat("Earned", Money.format(sums.filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency), MoneyColors.income, Modifier.weight(1f))
                                 }
                             }
                         }
@@ -323,10 +326,10 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                 // ---------- All accounts ----------
                 else -> {
                     item(key = "accounts") { Column {
-                        val total = accs.sumOf { it.balance }
+                        val total = accs.totalBalance()
                         Card {
                             Column(Modifier.padding(14.dp)) {
-                                Text("Total balance (all accounts)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Total balance (your own accounts)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
                                     Money.format(total, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black,
                                     color = if (total < 0) MoneyColors.expense else MoneyColors.income,
@@ -337,14 +340,27 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                         Card {
                             accs.forEach { a ->
                                 val n = txns.count { inPeriod(it) && (it.accountId == a.account.id || it.toAccountId == a.account.id) }
-                                ItemRow(
-                                    icon = a.account.icon, color = a.account.color, title = a.account.name,
-                                    subtitle = periodName,
-                                    count = records(n),
-                                    amount = Money.format(a.balance, currency),
-                                    amountColor = if (a.balance < 0) MoneyColors.expense else MaterialTheme.colorScheme.onSurface,
-                                    editing = editing, onEdit = { editAcc = a.account }, onDelete = null,
-                                ) { accId = a.account.id; view = "acc" }
+                                if (a.account.tracking) {
+                                    // Tracking only: show how much was paid through it in this period.
+                                    val paid = txns.filter { inPeriod(it) && it.accountId == a.account.id && it.type == TxnType.EXPENSE }.sumOf { it.amount }
+                                    ItemRow(
+                                        icon = a.account.icon, color = a.account.color, title = a.account.name,
+                                        subtitle = "Tracking only · paid in $periodName",
+                                        count = records(n),
+                                        amount = Money.format(paid, currency),
+                                        amountColor = MaterialTheme.colorScheme.tertiary,
+                                        editing = editing, onEdit = { editAcc = a.account }, onDelete = null,
+                                    ) { accId = a.account.id; view = "acc" }
+                                } else {
+                                    ItemRow(
+                                        icon = a.account.icon, color = a.account.color, title = a.account.name,
+                                        subtitle = periodName,
+                                        count = records(n),
+                                        amount = Money.format(a.balance, currency),
+                                        amountColor = if (a.balance < 0) MoneyColors.expense else MaterialTheme.colorScheme.onSurface,
+                                        editing = editing, onEdit = { editAcc = a.account }, onDelete = null,
+                                    ) { accId = a.account.id; view = "acc" }
+                                }
                             }
                             if (editing) AddRow("Add account") { editAcc = Account(name = "", sortOrder = accs.size) }
                         }

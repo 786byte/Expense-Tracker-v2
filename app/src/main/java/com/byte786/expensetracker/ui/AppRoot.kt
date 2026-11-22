@@ -75,6 +75,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.byte786.expensetracker.ExpenseApp
+import com.byte786.expensetracker.data.totalBalance
 import com.byte786.expensetracker.ui.components.CatFace
 import com.byte786.expensetracker.ui.components.rememberStatus
 import com.byte786.expensetracker.ui.screens.AccountsTab
@@ -92,7 +93,11 @@ import java.time.YearMonth
 /** Switches bottom-bar tabs without piling up screens; Home is always the base. */
 fun NavHostController.goTab(route: String) {
     if (route == Routes.HOME) {
-        popBackStack(Routes.HOME, inclusive = false)
+        // Pop back to Home by its id; fall back to navigating if it isn't on the stack.
+        val home = graph.findStartDestination().id
+        if (currentDestination?.id != home && !popBackStack(home, inclusive = false)) {
+            navigate(Routes.HOME) { popUpTo(graph.id) { inclusive = true }; launchSingleTop = true }
+        }
         return
     }
     navigate(route) {
@@ -188,7 +193,7 @@ private fun AppDrawer(nav: NavHostController, close: () -> Unit) {
     val currency = LocalCurrency.current
     var resetStep by remember { mutableIntStateOf(0) } // 0 closed, 1 choose, 2 confirm
     var resetAll by remember { mutableStateOf(false) }
-    val total = accounts.sumOf { it.balance }
+    val total = accounts.totalBalance()
 
     fun go(r: String) {
         close()

@@ -92,7 +92,7 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
     val periodState = rememberPeriodState()
     var openId by remember { mutableStateOf<Long?>(null) }
     val range = periodState.range
-    val period = remember(txns, range) { txns.filter { periodState.contains(it.date) } }
+    val period = remember(txns, range, lk) { lk.own(txns).filter { periodState.contains(it.date) } }
     val income = period.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
     val expense = period.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
     val incomeColor = MoneyColors.income
@@ -185,7 +185,7 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
                     Text("Income vs expense by month", fontWeight = FontWeight.Black)
                     Spacer(Modifier.height(12.dp))
                     TrendChart(
-                        txns,
+                        lk.own(txns),
                         when (periodState.mode) {
                             PeriodState.MONTH -> periodState.month
                             PeriodState.RANGE -> YearMonth.from(Dates.date(periodState.until - 1))
@@ -197,7 +197,7 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
             }
 
             item(key = "records") {
-                val bills = lk.merged(txns)
+                val bills = lk.merged(txns).filter { lk.counts(it) }
                 val bigExp = bills.filter { it.type == TxnType.EXPENSE }.maxByOrNull { it.amount }
                 val bigInc = bills.filter { it.type == TxnType.INCOME }.maxByOrNull { it.amount }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
