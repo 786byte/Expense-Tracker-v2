@@ -46,7 +46,7 @@ Work branch: `claude/android-expense-tracker-go5jzv` (not merged into `main`; no
 |---|---|
 | `ExpenseApp.kt` | Application; creates `Repository`, schedules backup |
 | `data/Entities.kt` | `Account`, `Category` (parentId = subcategory), `Txn` (type, amount in **paisa**, date millis, accountId, toAccountId, categoryId, subcategoryId, `memo` = title, `description`, `photo`, `groupId`) |
-| `data/AppDatabase.kt` | Room **v3**; `MIGRATION_1_2` adds `description` and `groupId` (nullable); `MIGRATION_2_3` adds `accounts.tracking INTEGER NOT NULL DEFAULT 0` (entity has `@ColumnInfo(defaultValue = "0")`) |
+| `data/AppDatabase.kt` | Room **v4** (`MIGRATION_3_4` adds `accounts.countInCategories INTEGER NOT NULL DEFAULT 0`); `MIGRATION_1_2` adds `description` and `groupId` (nullable); `MIGRATION_2_3` adds `accounts.tracking INTEGER NOT NULL DEFAULT 0` (entity has `@ColumnInfo(defaultValue = "0")`) |
 | `data/AppDao.kt` | Queries, account balances SQL, `replaceTxns`, `moveCategory`, `replaceAll` |
 | `data/Repository.kt` | StateFlows (`txns`, `categories`, `accounts`), `launch{}` for writes that must survive screen close, `saveRecords`, `deleteTxn` (deletes the whole split group), resets with a safety copy, `voiceDraft`, `iconsDir`/`iconFile`/`customIcons`, `mergeCategory`, `refreshCategoryIcons`, orphan photo/icon cleanup at start |
 | `data/Backup.kt` / `BackupScheduler.kt` | Zip backup (data.json + photos/ + icons/) to a user-chosen file (e.g. Google Drive) via SAF; auto backup 30 s after changes plus daily; restore; CSV export |
@@ -109,6 +109,8 @@ list; mood thresholds = % of usual monthly income (sliders in Settings); extra
 customisation = font size, Home sections, currency format.
 
 Build 8 added: **tracking-only accounts** (`Account.tracking`; parts paid from them are logged but excluded from income/expense via `Lookup.counts()/own()` and `List<Txn>.own()`, merged rows show your own share, accounts tab shows “paid through it”, `totalBalance()` skips them), Home-tab fix (`goTab` pops to the start destination by id, falls back to navigate), and Gen-Z icons (custom vectors PowerUp, Crown, Sigma, Skull, Ghost, Katana, Ramen, Diamond + fire, sparkles, trophy, brain, MMA, nightlife…). Icons are generic shapes, not copies of any anime character.
+
+Build 9 added: per-account **Count in categories** toggle for tracking accounts (`Lookup.countsInCategories()/ownCat()`, `merged(list, forCategories = true)`; used by the Accounts tab category/subcategory views and Analysis; Home month totals, status cat and total balance still use `own()`), tracking accounts list both spent and received, the **handmade look** (`prefs.handmade`, default on: Patrick Hand font from `res/font` (OFL, licence in `docs/licenses/`), `Modifier.sketchBorder()` in `ui/components/Sketch.kt` draws two wobbly pencil outlines; `LocalHandmade`), a **Sketchbook** palette (paper / chalkboard), and a new adaptive app icon (cat peeking over a taka coin; `drawable/ic_launcher_background|foreground|monochrome.xml`).
 
 Nothing new is queued. Ideas if the owner asks for more: budgets per category with the
 cat warning, recurring records, home-screen widget, re-crop an already attached photo,

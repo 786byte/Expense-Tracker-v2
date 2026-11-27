@@ -26,6 +26,8 @@ data class Account(
      * as your income/expense, and the account is left out of the total balance.
      */
     @ColumnInfo(defaultValue = "0") val tracking: Boolean = false,
+    /** For tracking-only accounts: still count their records in category / subcategory totals and Analysis. */
+    @ColumnInfo(defaultValue = "0") val countInCategories: Boolean = false,
 )
 
 data class AccountBalance(

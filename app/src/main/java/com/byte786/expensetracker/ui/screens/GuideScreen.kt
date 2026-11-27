@@ -109,7 +109,8 @@ private val topics = listOf(
             "Tracking-only accounts (e.g. Mom's grant): Edit → ✎ on the account → turn on “Tracking only”. " +
             "When Mom pays ৳300 of a ৳500 thing, record it as paid from Cash ৳200 + Mom's grant ৳300. " +
             "Only your ৳200 counts as your expense; the ৳300 is logged under Mom's grant, which shows how much was paid " +
-            "through it and is left out of your total balance.",
+            "through it and is left out of your total balance. Turn on “Count in categories” as well if you want that ৳300 " +
+            "to still show in Food (or whichever category) and in Analysis; it still stays out of your balance and Home's month totals.",
     ),
     GuideTopic(
         Icons.Filled.Info, "Opening a record",
@@ -152,7 +153,8 @@ private val topics = listOf(
     GuideTopic(
         Icons.Filled.Tune, "Making it yours",
         "Backup & settings has:\n" +
-            "• Theme: Ginger, Midnight black cat, Siamese cream, Grey tabby or Calico, each with light and dark versions; " +
+            "• Handmade look: a handwriting font and pencil-drawn boxes (on by default).\n" +
+            "• Theme: Sketchbook (paper by day, chalkboard by night), Ginger, Midnight black cat, Siamese cream, Grey tabby or Calico, each with light and dark versions; " +
             "Pure black (AMOLED) for dark mode; or your wallpaper's colors.\n" +
             "• Text size: Small to Huge.\n" +
             "• Icon on records in lists: the category's (default) or the subcategory's.\n" +

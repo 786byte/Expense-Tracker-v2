@@ -112,6 +112,15 @@ class Lookup(
 
     /** Only the records that count as your own income/expense. */
     fun own(list: List<Txn>): List<Txn> = list.own(tracking)
+
+    /** Tracking accounts whose records stay out of category totals too. */
+    val notInCategories: Set<Long> = accs.filter { it.tracking && !it.countInCategories }.map { it.id }.toSet()
+
+    /** Whether this record counts in category / subcategory totals and Analysis. */
+    fun countsInCategories(t: Txn): Boolean = t.type == TxnType.TRANSFER || t.accountId !in notInCategories
+
+    /** Records for category / subcategory totals and Analysis. */
+    fun ownCat(list: List<Txn>): List<Txn> = list.own(notInCategories)
     /** Parts of bills paid from several accounts, by groupId. */
     val groups: Map<Long, List<Txn>> = txns.filter { it.groupId != null }.groupBy { it.groupId!! }
 
@@ -119,14 +128,15 @@ class Lookup(
      * For display: each bill paid from several accounts becomes one record
      * (the first part, carrying the bill's whole amount).
      */
-    fun merged(list: List<Txn>): List<Txn> {
+    fun merged(list: List<Txn>, forCategories: Boolean = false): List<Txn> {
+        val keep: (Txn) -> Boolean = { t -> if (forCategories) countsInCategories(t) else counts(t) }
         val seen = HashSet<Long>()
         return list.mapNotNull { t ->
             val g = t.groupId ?: return@mapNotNull t
             if (!seen.add(g)) return@mapNotNull null
             val parts = groups[g] ?: return@mapNotNull t
             // The row stands for your own share; parts paid from tracking accounts are left out.
-            val mine = parts.filter { counts(it) }
+            val mine = parts.filter(keep)
             val rep = mine.firstOrNull() ?: parts.first()
             rep.copy(amount = (mine.ifEmpty { parts }).sumOf { it.amount })
         }

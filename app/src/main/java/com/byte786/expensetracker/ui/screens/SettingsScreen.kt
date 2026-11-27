@@ -91,6 +91,7 @@ fun SettingsScreen(nav: NavController, action: String = "") {
     val dynamic by prefs.dynamicColor.collectAsState()
     val paletteName by prefs.palette.collectAsState()
     val amoled by prefs.amoled.collectAsState()
+    val handmade by prefs.handmade.collectAsState()
     val fontSize by prefs.fontSize.collectAsState()
     val listIconSub by prefs.listIconSub.collectAsState()
     val symbolAfter by prefs.symbolAfter.collectAsState()
@@ -279,6 +280,7 @@ fun SettingsScreen(nav: NavController, action: String = "") {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Appearance", style = MaterialTheme.typography.titleMedium)
+                    SwitchRow("Handmade look", "Handwriting font and pencil-drawn boxes, like a notebook", handmade) { prefs.setHandmade(it) }
                     Text("Theme", style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         CatPalette.entries.forEach { p ->

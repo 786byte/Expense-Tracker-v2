@@ -2,6 +2,8 @@
 
 package com.byte786.expensetracker.ui.screens
 
+import com.byte786.expensetracker.ui.components.sketchBorder
+
 import android.speech.RecognizerIntent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -156,7 +158,7 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp)
                             .clip(RoundedCornerShape(20.dp))
                             .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))
+                            .sketchBorder(RoundedCornerShape(20.dp), 20.dp)
                             .padding(horizontal = 10.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -191,7 +193,7 @@ fun HomeScreen(nav: NavController, openDrawer: () -> Unit) {
                         Row(
                             Modifier.clip(RoundedCornerShape(14.dp))
                                 .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp)),
+                                .sketchBorder(RoundedCornerShape(14.dp), 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             IconButton(onClick = { month = month.minusMonths(1) }) { Icon(Icons.Filled.ChevronLeft, "Previous month") }

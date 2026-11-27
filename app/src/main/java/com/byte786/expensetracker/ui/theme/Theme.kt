@@ -4,6 +4,12 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
+import com.byte786.expensetracker.R
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -12,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -80,6 +87,24 @@ val LocalCurrency = staticCompositionLocalOf { "৳" }
 /** Changing the money format re-draws every screen (static local). */
 val LocalMoneyStyle = staticCompositionLocalOf { MoneyStyle() }
 
+/** Handmade look on: pencil card outlines (see ui.components.sketchBorder) and the handwriting font. */
+val LocalHandmade = staticCompositionLocalOf { false }
+
+/** Patrick Hand (SIL Open Font License), bundled in res/font. */
+val HandFont = FontFamily(Font(R.font.patrick_hand))
+
+private fun handTypography(): Typography {
+    val d = Typography()
+    fun TextStyle.hand(scale: Float = 1.08f) = copy(fontFamily = HandFont, fontSize = fontSize * scale, letterSpacing = 0.sp)
+    return d.copy(
+        displayLarge = d.displayLarge.hand(), displayMedium = d.displayMedium.hand(), displaySmall = d.displaySmall.hand(),
+        headlineLarge = d.headlineLarge.hand(), headlineMedium = d.headlineMedium.hand(), headlineSmall = d.headlineSmall.hand(),
+        titleLarge = d.titleLarge.hand(1.12f), titleMedium = d.titleMedium.hand(1.12f), titleSmall = d.titleSmall.hand(1.1f),
+        bodyLarge = d.bodyLarge.hand(), bodyMedium = d.bodyMedium.hand(), bodySmall = d.bodySmall.hand(1.1f),
+        labelLarge = d.labelLarge.hand(1.1f), labelMedium = d.labelMedium.hand(1.1f), labelSmall = d.labelSmall.hand(1.1f),
+    )
+}
+
 /** Colours of the status cat, matching the theme. */
 data class CatStyle(val fur: Color, val eyes: Color, val ink: Color, val furDark: Color)
 
@@ -99,6 +124,10 @@ enum class CatPalette(
     val darkInk: Color,
     val cat: CatStyle,
 ) {
+    SKETCHBOOK(
+        "Sketchbook / chalkboard", Color(0xFF2F5D9E), Color(0xFFFBF5E6), Color(0xFF2B2B35), Color(0xFFF2D06B), Color(0xFF1E2A23), Color(0xFFEDEBE3),
+        CatStyle(Color(0xFFF4EFE4), Color(0xFF2B2B35), Color(0xFF2B2B35), Color(0xFFD8CFC0)),
+    ),
     GINGER(
         "Ginger", Color(0xFFA8520F), Color(0xFFFFF7EE), Color(0xFF2A1F17), Color(0xFFF2A55E), Color(0xFF1C1611), Color(0xFFF1E2D2),
         CatStyle(Color(0xFFE8913A), Color(0xFF2A1F17), Color(0xFF2A1F17), Color(0xFFC46F22)),
@@ -201,6 +230,7 @@ fun AppTheme(content: @Composable () -> Unit) {
     val symbolAfter by prefs.symbolAfter.collectAsState()
     val decimals by prefs.decimals.collectAsState()
     val indian by prefs.indianGrouping.collectAsState()
+    val handmade by prefs.handmade.collectAsState()
     val dark = when (mode) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
     val ctx = LocalContext.current
     val palette = CatPalette.of(paletteName)
@@ -219,9 +249,11 @@ fun AppTheme(content: @Composable () -> Unit) {
         LocalCurrency provides currency,
         LocalMoneyStyle provides moneyStyle,
         LocalCatStyle provides palette.cat,
+        LocalHandmade provides handmade,
         LocalDensity provides Density(density.density, density.fontScale * scale),
     ) {
-        MaterialTheme(colorScheme = scheme, content = content)
+        if (handmade) MaterialTheme(colorScheme = scheme, typography = remember { handTypography() }, content = content)
+        else MaterialTheme(colorScheme = scheme, content = content)
     }
 }
 

@@ -2,6 +2,8 @@
 
 package com.byte786.expensetracker.ui.screens
 
+import com.byte786.expensetracker.ui.components.sketchBorder
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -92,7 +94,7 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
     val periodState = rememberPeriodState()
     var openId by remember { mutableStateOf<Long?>(null) }
     val range = periodState.range
-    val period = remember(txns, range, lk) { lk.own(txns).filter { periodState.contains(it.date) } }
+    val period = remember(txns, range, lk) { lk.ownCat(txns).filter { periodState.contains(it.date) } }
     val income = period.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
     val expense = period.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
     val incomeColor = MoneyColors.income
@@ -185,7 +187,7 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
                     Text("Income vs expense by month", fontWeight = FontWeight.Black)
                     Spacer(Modifier.height(12.dp))
                     TrendChart(
-                        lk.own(txns),
+                        lk.ownCat(txns),
                         when (periodState.mode) {
                             PeriodState.MONTH -> periodState.month
                             PeriodState.RANGE -> YearMonth.from(Dates.date(periodState.until - 1))
@@ -197,7 +199,7 @@ fun AnalysisScreen(nav: NavController, openDrawer: () -> Unit) {
             }
 
             item(key = "records") {
-                val bills = lk.merged(txns).filter { lk.counts(it) }
+                val bills = lk.merged(txns, forCategories = true).filter { lk.countsInCategories(it) }
                 val bigExp = bills.filter { it.type == TxnType.EXPENSE }.maxByOrNull { it.amount }
                 val bigInc = bills.filter { it.type == TxnType.INCOME }.maxByOrNull { it.amount }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -215,7 +217,7 @@ private fun Panel(content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))
+            .sketchBorder(RoundedCornerShape(20.dp), 20.dp)
             .padding(16.dp),
         content = content,
     )
@@ -298,7 +300,7 @@ private fun RecordCard(title: String, t: Txn?, lk: Lookup, color: Color, modifie
     Column(
         modifier.clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+            .sketchBorder(RoundedCornerShape(16.dp), 16.dp)
             .clickable(enabled = t != null) { t?.let(onClick) }
             .padding(12.dp),
     ) {

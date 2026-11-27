@@ -156,12 +156,12 @@ object Backup {
 
     private fun Account.toJson() = JSONObject().apply {
         put("id", id); put("name", name); put("icon", icon); put("color", color)
-        put("initialBalance", initialBalance); put("sortOrder", sortOrder); put("tracking", tracking)
+        put("initialBalance", initialBalance); put("sortOrder", sortOrder); put("tracking", tracking); put("countInCategories", countInCategories)
     }
     private fun JSONObject.toAccount() = Account(
         id = getLong("id"), name = getString("name"), icon = optString("icon", "wallet"),
         color = optLong("color", 0xFF00897B), initialBalance = optLong("initialBalance"), sortOrder = optInt("sortOrder"),
-        tracking = optBoolean("tracking", false),
+        tracking = optBoolean("tracking", false), countInCategories = optBoolean("countInCategories", false),
     )
 
     private fun Category.toJson() = JSONObject().apply {

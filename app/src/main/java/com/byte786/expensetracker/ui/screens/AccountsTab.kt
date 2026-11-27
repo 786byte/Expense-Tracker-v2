@@ -2,6 +2,8 @@
 
 package com.byte786.expensetracker.ui.screens
 
+import com.byte786.expensetracker.ui.components.sketchBorder
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -203,7 +205,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                         icon = c.icon, color = c.color, title = c.name,
                                         subtitle = if (subs.isEmpty()) "No subcategories" else subs.joinToString { it.name },
                                         count = records(lk.merged(tx).size),
-                                        amount = Money.format(lk.own(tx).filter { it.type == type }.sumOf { it.amount }, currency),
+                                        amount = Money.format(lk.ownCat(tx).filter { it.type == type }.sumOf { it.amount }, currency),
                                         amountColor = if (type == TxnType.EXPENSE) MoneyColors.expense else MoneyColors.income,
                                         editing = editing,
                                         onEdit = { editCat = c },
@@ -235,7 +237,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                         icon = sc.icon, color = sc.color, title = sc.name,
                                         subtitle = "in ${parent?.name ?: "?"}",
                                         count = records(lk.merged(tx).size),
-                                        amount = Money.format(lk.own(tx).filter { it.type == type }.sumOf { it.amount }, currency),
+                                        amount = Money.format(lk.ownCat(tx).filter { it.type == type }.sumOf { it.amount }, currency),
                                         amountColor = if (type == TxnType.EXPENSE) MoneyColors.expense else MoneyColors.income,
                                         editing = editing,
                                         onEdit = { editCat = sc },
@@ -258,7 +260,7 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                         val tx = txns.filter { inPeriod(it) && it.categoryId == c.id }
                         val subs = cats.filter { it.parentId == c.id }
                         BackRow("All categories") { back() }
-                        Header(c.icon, c.color, c.name, "$periodName · spent ${Money.format(lk.own(tx).filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency)} · earned ${Money.format(lk.own(tx).filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency)}")
+                        Header(c.icon, c.color, c.name, "$periodName · spent ${Money.format(lk.ownCat(tx).filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency)} · earned ${Money.format(lk.ownCat(tx).filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency)}")
                         Label("Subcategories · tap one for details")
                         Card {
                             val rows = subs.map { it as Category? } + (if (tx.any { it.subcategoryId == null }) listOf(null) else emptyList())
@@ -267,8 +269,8 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                 val st = tx.filter { it.subcategoryId == s?.id }
                                 SubRow(
                                     name = s?.name ?: "No subcategory", count = lk.merged(st).size,
-                                    spent = Money.format(lk.own(st).filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency),
-                                    earned = Money.format(lk.own(st).filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency),
+                                    spent = Money.format(lk.ownCat(st).filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }, currency),
+                                    earned = Money.format(lk.ownCat(st).filter { it.type == TxnType.INCOME }.sumOf { it.amount }, currency),
                                     editing = editing && s != null,
                                     onEdit = { if (s != null) editCat = s },
                                 ) { subId = s?.id ?: NO_SUB; view = "sub" }
@@ -286,11 +288,19 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                     val list = txns.filter {
                         inPeriod(it) && if (isAcc) it.accountId == accId || it.toAccountId == accId
                         else it.categoryId == catId && it.subcategoryId == (if (subId == NO_SUB) null else subId)
-                    }.let { if (isAcc) it else lk.merged(it) }
+                    }.let { if (isAcc) it else lk.merged(it, forCategories = true) }
                     // Account view: split-bill parts show their own amount, so no merging there.
                     // Account view: everything through that account. Category view: only your own share.
-                    val sums = if (isAcc) list else list.filter { lk.counts(it) }
+                    val sums = if (isAcc) list else list.filter { lk.countsInCategories(it) }
                     item(key = "detail-head") { Column {
+                        if (isAcc && lk.acc[accId]?.tracking == true) {
+                            Text(
+                                if (lk.acc[accId]?.countInCategories == true) "Tracking only: not in your total balance or month totals, but counted in categories."
+                                else "Tracking only: not counted in your balance, totals or categories.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                            )
+                        }
                         val title = if (isAcc) lk.acc[accId]?.name ?: "" else
                             (lk.cat[catId]?.name ?: "") + " › " + (if (subId == NO_SUB) "No subcategory" else lk.cat[subId]?.name ?: "")
                         BackRow(
@@ -342,11 +352,13 @@ fun AccountsTab(nav: NavController, openDrawer: () -> Unit) {
                                 val n = txns.count { inPeriod(it) && (it.accountId == a.account.id || it.toAccountId == a.account.id) }
                                 if (a.account.tracking) {
                                     // Tracking only: show how much was paid through it in this period.
-                                    val paid = txns.filter { inPeriod(it) && it.accountId == a.account.id && it.type == TxnType.EXPENSE }.sumOf { it.amount }
+                                    val mine = txns.filter { inPeriod(it) && it.accountId == a.account.id }
+                                    val paid = mine.filter { it.type == TxnType.EXPENSE }.sumOf { it.amount }
+                                    val got = mine.filter { it.type == TxnType.INCOME }.sumOf { it.amount }
                                     ItemRow(
                                         icon = a.account.icon, color = a.account.color, title = a.account.name,
-                                        subtitle = "Tracking only · paid in $periodName",
-                                        count = records(n),
+                                        subtitle = "Tracking only · received ${Money.format(got, currency)} · " + records(n),
+                                        count = "spent · $periodName",
                                         amount = Money.format(paid, currency),
                                         amountColor = MaterialTheme.colorScheme.tertiary,
                                         editing = editing, onEdit = { editAcc = a.account }, onDelete = null,
@@ -391,7 +403,7 @@ private fun Card(content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)),
+            .sketchBorder(RoundedCornerShape(16.dp), 16.dp),
         content = content,
     )
 }

@@ -231,6 +231,7 @@ fun AccountEditDialog(initial: Account, onDismiss: () -> Unit, onMessage: (Strin
     var color by remember { mutableStateOf(initial.color) }
     var opening by remember { mutableStateOf(Money.toInput(initial.initialBalance)) }
     var tracking by remember { mutableStateOf(initial.tracking) }
+    var countInCats by remember { mutableStateOf(initial.countInCategories) }
     val isNew = initial.id == 0L
 
     AlertDialog(
@@ -255,6 +256,17 @@ fun AccountEditDialog(initial: Account, onDismiss: () -> Unit, onMessage: (Strin
                     }
                     Switch(checked = tracking, onCheckedChange = { tracking = it })
                 }
+                if (tracking) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Count in categories", fontWeight = FontWeight.Bold)
+                        Text(
+                            "On: what's paid from it still adds to category and subcategory totals and Analysis " +
+                                "(e.g. Food shows the full ৳500). It stays out of your total balance and Home's month totals.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = countInCats, onCheckedChange = { countInCats = it })
+                }
                 if (!tracking) OutlinedTextField(
                     opening, { v -> if (v.all { it.isDigit() || it == '.' || it == '-' }) opening = v },
                     label = { Text("Starting balance") }, prefix = { Text(currency) }, singleLine = true,
@@ -268,7 +280,7 @@ fun AccountEditDialog(initial: Account, onDismiss: () -> Unit, onMessage: (Strin
             TextButton(onClick = {
                 if (name.isNotBlank()) {
                     val bal = Money.parse(opening) ?: 0L
-                    repo.launch { repo.saveAccount(initial.copy(name = name.trim(), icon = icon, color = color, initialBalance = bal, tracking = tracking)) }
+                    repo.launch { repo.saveAccount(initial.copy(name = name.trim(), icon = icon, color = color, initialBalance = bal, tracking = tracking, countInCategories = tracking && countInCats)) }
                     onDismiss()
                 }
             }) { Text("Save") }

@@ -47,6 +47,10 @@ class Prefs(ctx: Context) {
     val palette = MutableStateFlow(sp.getString("palette", "GINGER") ?: "GINGER")
     fun setPalette(v: String) { palette.value = v; sp.edit { putString("palette", v) } }
 
+    /** Handmade look: handwriting font and pencil-drawn card outlines. */
+    val handmade = MutableStateFlow(sp.getBoolean("handmade", true))
+    fun setHandmade(v: Boolean) { handmade.value = v; sp.edit { putBoolean("handmade", v) } }
+
     /** Pure black backgrounds in dark mode. */
     val amoled = MutableStateFlow(sp.getBoolean("amoled", false))
     fun setAmoled(v: Boolean) { amoled.value = v; sp.edit { putBoolean("amoled", v) } }
